@@ -46,7 +46,8 @@ INSTALLED_APPS = [
     "corsheaders",
 
     # your apps
-    "users",  # make sure this app exists
+    "users",
+    'posts',  # make sure this app exists
 ]
 
 MIDDLEWARE = [
