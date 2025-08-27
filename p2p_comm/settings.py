@@ -1,9 +1,9 @@
 # p2p_comm/settings.py
+import ssl, certifi
+import dj_database_url
 from pathlib import Path
 from datetime import timedelta
-import ssl, certifi
 from decouple import config, Csv
-
 def get_env(key, default=None, cast=str, required=False):
     """
     Get environment variable via python-decouple.
@@ -23,10 +23,11 @@ SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DEBUG", default="False")
 
 # Development hosts
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+ALLOWED_HOSTS = get_env("ALLOWED_HOSTS").split(",")
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
     # django core
     "django.contrib.admin",
     "django.contrib.auth",
@@ -46,8 +47,10 @@ INSTALLED_APPS = [
     "corsheaders",
 
     # your apps
+    'p2p_messages', # make sure this app exists
     "users",
-    'posts',  # make sure this app exists
+    'posts',
+    "channels", 
 ]
 
 MIDDLEWARE = [
@@ -63,6 +66,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
 ]
 
+FERNET_KEY = get_env('FERNET_KEY', required=True).encode('utf-8')
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -89,14 +93,28 @@ TEMPLATES = [
     },
 ]
 
+ASGI_APPLICATION = "p2p_comm.asgi.application"
 WSGI_APPLICATION = "p2p_comm.wsgi.application"
 
-# Database - keep SQLite for dev; switch to Postgres in prod
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6379)],
+        },
+    },
+}
+
+
+# This one block of code handles everything for you.
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    'default': dj_database_url.config(
+        # Read the DATABASE_URL from your .env file
+        default=config('DATABASE_URL'),
+        # Set a persistent connection and require SSL (critical for Neon)
+        conn_max_age=600,
+        ssl_require=True
+    )
 }
 
 # Custom user model
