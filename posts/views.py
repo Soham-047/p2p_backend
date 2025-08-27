@@ -46,6 +46,7 @@ class PostListCreateView(APIView):
                     "title": "My First Post",
                     "content": "This is the content of my first post.",
                     "tags": ["django", "rest"],
+                    "author": 1,
                 },
                 request_only=True,
                 response_only=False,
@@ -196,7 +197,7 @@ class PostCommentsView(APIView):
         examples=[
             OpenApiExample(
                 "Example request",
-                value={"content": "This is a comment.", "parent": None,"author": "user1"},
+                value={"content": "This is a comment.", "parent": None, "author": 1},
                 request_only=True,
                 response_only=False,
             )
