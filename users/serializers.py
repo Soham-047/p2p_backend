@@ -156,3 +156,27 @@ class ProfileSerializer(serializers.ModelSerializer):
             instance.avatar_size = len(decoded)
 
         return super().update(instance, validated_data)
+
+class MeProfileSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    username = serializers.CharField(source="user.username", required=False)
+    full_name = serializers.CharField(source="user.full_name", required=False)
+    email = serializers.EmailField(source="user.email", read_only=True)  
+    secondary_email = serializers.EmailField(source="user.secondary_email", required=False, allow_null=True, allow_blank=True)
+    batch = serializers.CharField(source="user.batch", required=False, allow_blank=True, allow_null=True)
+    is_current_student = serializers.BooleanField(source="user.is_current_student", required=False)
+    class Meta:
+        model = Profile
+        fields = [
+            'user', "username", "full_name", "email", "secondary_email",
+            "batch", "is_current_student",
+            "headline", "about", "location",
+            "experiences", "links", "updated_at",
+        ]
+        read_only_fields = ["updated_at"]
+
+class AvatarSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        fields = ["avatar_blob", "avatar_content_type", "avatar_filename", "avatar_size"]
+        read_only_fields = ["avatar_content_type", "avatar_filename", "avatar_size"]

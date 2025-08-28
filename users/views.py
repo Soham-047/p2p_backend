@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from rest_framework.decorators import api_view, permission_classes
-from .serializers import RegistrationSerializer, ProfileSerializer, PublicProfileSerializer
+from .serializers import RegistrationSerializer, ProfileSerializer, PublicProfileSerializer, MeProfileSerializer
 from .models import Profile
 from .utils import make_username_from_email, make_random_password
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -21,6 +21,7 @@ from django.http import HttpResponse, Http404
 from rest_framework import status
 from django.db.models import Q
 from users.tasks import send_registration_email, log_user_activity
+import base64
 
 User = get_user_model()
 
@@ -143,23 +144,23 @@ class MeProfileView(APIView):
     @extend_schema(
         summary="Get current user's profile",
         description="Returns the authenticated user's profile.",
-        responses={200: ProfileSerializer},
+        responses={200: MeProfileSerializer},
         tags=["Profile"]
     )
     def get(self, request, *args, **kwargs):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        serializer = ProfileSerializer(profile)
+        serializer = MeProfileSerializer(profile)
         return Response(serializer.data)
     
     @extend_schema(
         summary="Update current user's profile",
         description="Partial update to profile (PATCH). Supports multipart for avatar or base64 payload.",
-        request=ProfileSerializer,
-        responses={200: ProfileSerializer},
-        tags=["Profile"]
+        request=MeProfileSerializer,
+        responses={200: MeProfileSerializer},
+        tags=["Profile"],
     )
     def patch(self, request, *args, **kwargs):
-        serializer = ProfileSerializer(
+        serializer = MeProfileSerializer(
             request.user.profile, data=request.data, partial=True
         )
         if serializer.is_valid():
@@ -273,3 +274,80 @@ def profile_avatar_view(request, username):
     # optionally set Content-Disposition if you want it downloaded:
     # resp['Content-Disposition'] = f'inline; filename="{profile.avatar_filename}"'
     return resp
+
+@extend_schema(
+    summary="Upload/Update avatar",
+    description="Upload an avatar image using multipart form (key=`avatar`) or base64 string (`avatar_base64`).",
+    request={
+        "multipart/form-data": {
+            "type": "object",
+            "properties": {
+                "avatar": {"type": "string", "format": "binary"},
+                "avatar_base64": {"type": "string", "example": "iVBORw0KGgoAAAANSUhEUg..."}
+            },
+        },
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "avatar_base64": {"type": "string", "example": "iVBORw0KGgoAAAANSUhEUg..."}
+            }
+        }
+    },
+    responses={
+        200: OpenApiExample(
+            "Success Response",
+            value={"detail": "Avatar updated successfully"}
+        ),
+        400: OpenApiExample(
+            "Error Response",
+            value={"detail": "Invalid base64 or no avatar provided"}
+        )
+    },
+    tags=["Profile"]
+)
+class MeAvatarUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def post(self, request):
+        profile = request.user.profile
+        avatar_file = request.FILES.get("avatar")
+        avatar_b64 = request.data.get("avatar_base64")
+
+        if not avatar_file and not avatar_b64:
+            return Response({"detail": "No avatar provided"}, status=400)
+
+        if avatar_file:
+            profile.avatar_blob = avatar_file.read()
+            profile.avatar_content_type = avatar_file.content_type
+            profile.avatar_filename = avatar_file.name
+            profile.avatar_size = avatar_file.size
+        else:
+            try:
+                blob = base64.b64decode(avatar_b64)
+            except Exception:
+                return Response({"detail": "Invalid base64"}, status=400)
+            profile.avatar_blob = blob
+            profile.avatar_content_type = "image/png"  # assume png if base64
+            profile.avatar_filename = "avatar.png"
+            profile.avatar_size = len(blob)
+
+        profile.save()
+        log_user_activity.delay(request.user.id, "Updated avatar")
+
+        return Response({"detail": "Avatar updated successfully"})
+
+    @extend_schema(
+        summary="Get current user's avatar",
+        description="Returns the avatar binary stream if uploaded, else 404.",
+        responses={200: {"content": {"image/png": {}}}, 404: {"description": "No avatar"}},
+        tags=["Profile"]
+    )
+    def get(self, request):
+        profile = request.user.profile
+        if not profile.has_avatar():
+            raise Http404("No avatar")
+        return HttpResponse(
+            profile.avatar_blob,
+            content_type=profile.avatar_content_type or "application/octet-stream"
+        )
