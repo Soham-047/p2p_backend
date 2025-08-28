@@ -4,6 +4,7 @@ import dj_database_url
 from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv
+from celery import Celery
 def get_env(key, default=None, cast=str, required=False):
     """
     Get environment variable via python-decouple.
@@ -136,6 +137,7 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -206,9 +208,12 @@ DEFAULT_FROM_EMAIL = get_env("EMAIL_ID", required=True)
 
 
 # CELERy TASKS
+app = Celery("p2p_comm")
+app.config_from_object("django.conf:settings", namespace="CELERY")
+app.autodiscover_tasks()
 
-CELERY_BROKER_URL = "redis://localhost:6379/0"
-CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
+CELERY_BROKER_URL = "redis://redis:6379/0"
+CELERY_RESULT_BACKEND = "redis://redis:6379/0"
 
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
@@ -216,15 +221,14 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
 
 # Chaching
+# If you’re caching with Redis
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",  # different DB slot than Celery
+        "LOCATION": "redis://redis:6379/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        },
-        "KEY_PREFIX": "p2pcomm",   # namespace for your project
-        "TIMEOUT": 600,            # 10 minutes default TTL
+        }
     }
 }
 from django.core.cache import cache
