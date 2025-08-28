@@ -233,8 +233,8 @@ CACHES = {
 }
 from django.core.cache import cache
 
-# set
-cache.set("welcome_message", "Hello Redis!", timeout=60)
-
-# get
-msg = cache.get("welcome_message")  # -> "Hello Redis!"
+def set_welcome_message():
+    try:
+        cache.set("welcome_message", "Hello Redis!", timeout=60)
+    except Exception as e:
+        print(f"Failed to set cache: {e}")

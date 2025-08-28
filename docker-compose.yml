@@ -1,84 +1,41 @@
 services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
   web:
     build: .
-    command: gunicorn p2p_comm.wsgi:application --bind 0.0.0.0:8000
+    command: /app/entrypoint.sh gunicorn p2p_comm.wsgi:application --bind 0.0.0.0:8000
     volumes:
       - .:/app
     ports:
       - "8000:8000"
     depends_on:
       - redis
-    environment:
-      EMAIL_API_KEY: "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"
-      SECRET_KEY: "p2pcommrgeatwlsao932yr724r^%^&3xirij@django_secure"
-      DEBUG: "True"
-      EMAIL_ID: "di45soham@gmail.com"
-      FERNET_KEY: "vlHgc5DA3QHERlz6F9rS6SExUBMnCawbaClhR91bl2I="
-      DATABASE_URL: "postgresql://neondb_owner:npg_0M2vxOYVLrJB@ep-gentle-bush-a11kg3kl-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-      ALLOWED_HOSTS: "127.0.0.1,localhost"
-      DATABASE: "postgres"
-      DATABASE_HOST: "ep-gentle-bush-a11kg3kl-pooler.ap-southeast-1.aws.neon.tech"
-      DATABASE_PORT: 5432
-      DATABASE_NAME: "neondb"
-      DATABASE_USER: "neondb_owner"
-      DATABASE_PASSWORD: "npg_0M2vxOYVLrJB"
-      environment:
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
-
-
-  dev:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - .:/app
-    ports:
-      - "8001:8000"   # run dev server on 8001 so it doesn’t clash with gunicorn
-    depends_on:
-      - redis
-    environment:
-      EMAIL_API_KEY: "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"
-      SECRET_KEY: "p2pcommrgeatwlsao932yr724r^%^&3xirij@django_secure"
-      DEBUG: "True"
-      EMAIL_ID: "di45soham@gmail.com"
-      FERNET_KEY: "vlHgc5DA3QHERlz6F9rS6SExUBMnCawbaClhR91bl2I="
-      DATABASE_URL: "postgresql://neondb_owner:npg_0M2vxOYVLrJB@ep-gentle-bush-a11kg3kl-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-      ALLOWED_HOSTS: "127.0.0.1,localhost"
-      DATABASE: "postgres"
-      DATABASE_HOST: "ep-gentle-bush-a11kg3kl-pooler.ap-southeast-1.aws.neon.tech"
-      DATABASE_PORT: 5432
-      DATABASE_NAME: "neondb"
-      DATABASE_USER: "neondb_owner"
-      DATABASE_PASSWORD: "npg_0M2vxOYVLrJB"
-
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
+      - db
+    env_file:
+      - .env
 
   celery:
     build: .
-    command: celery -A p2p_comm worker -l info
+    command: /app/entrypoint.sh celery -A p2p_comm worker -l info
     volumes:
       - .:/app
     depends_on:
       - redis
+      - db
+    env_file:
+      - .env
+
+  db:
+    image: postgres:13
     environment:
-      EMAIL_API_KEY: "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"
-      SECRET_KEY: "p2pcommrgeatwlsao932yr724r^%^&3xirij@django_secure"
-      DEBUG: "True"
-      EMAIL_ID: "di45soham@gmail.com"
-      FERNET_KEY: "vlHgc5DA3QHERlz6F9rS6SExUBMnCawbaClhR91bl2I="
-      DATABASE_URL: "postgresql://neondb_owner:npg_0M2vxOYVLrJB@ep-gentle-bush-a11kg3kl-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-      ALLOWED_HOSTS: "127.0.0.1,localhost"
-      DATABASE: "postgres"
-      DATABASE_HOST: "ep-gentle-bush-a11kg3kl-pooler.ap-southeast-1.aws.neon.tech"
-      DATABASE_PORT: 5432
-      DATABASE_NAME: "neondb"
-      DATABASE_USER: "neondb_owner"
-      DATABASE_PASSWORD: "npg_0M2vxOYVLrJB"
-      CELERY_BROKER_URL: "redis://redis:6379/0"
-      CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
 
 volumes:
   postgres_data:
