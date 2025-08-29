@@ -1,45 +1,37 @@
-from posts.models import (
-    Post,
-    Comment,
-    Tag,
-)
-
-from users.models import (
-    CustomUser, 
-)
+# posts/serializers.py
 from rest_framework import serializers
+from .models import Post, Comment, Tag
+from users.models import CustomUser
 from django.utils.text import slugify
 
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ["name", "slug"]
+
+    def validate(self, data):
+        if not data.get("slug"):
+            base_slug = slugify(data.get("name", ""))
+            unique_slug = base_slug
+            counter = 1
+            while Tag.objects.filter(slug=unique_slug).exists():
+                unique_slug = f"{base_slug}-{counter}"
+                counter += 1
+            data["slug"] = unique_slug
+        return data
 
 class PostSerializer(serializers.ModelSerializer):
-    # Optionally declare tags to help input validation (not strictly required)
-    tags = serializers.ListField(
-        child=serializers.CharField(),
-        allow_empty=True,
-        required=False,
-        write_only=True   # Write only; output handled in to_representation
-    )
+    tags = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
+    author = serializers.PrimaryKeyRelatedField(read_only=True)
+    slug = serializers.CharField(read_only=True)
 
     class Meta:
         model = Post
-        fields = ['title', 'content', 'slug', 'tags']  # 'tags' here refers to input ListField
-        read_only_fields = ['slug']
-
-    def validate_author(self, value):
-        if not isinstance(value, CustomUser):
-            raise serializers.ValidationError("Author must be a user")
-        return value
+        fields = ['title', 'content', 'slug', 'tags', 'author', 'published', 'created_at', 'updated_at']
+        read_only_fields = ['slug', 'author', 'created_at', 'updated_at']
 
     def validate(self, data):
-        # Generate unique slug if not provided
-        if not data.get('slug'):
-            base_slug = slugify(data.get('title', ''))
-            unique_slug = base_slug
-            counter = 1
-            while Post.objects.filter(slug=unique_slug).exists():
-                unique_slug = f"{base_slug}-{counter}"
-                counter += 1
-            data['slug'] = unique_slug
+        # slug auto-generation handled in model; nothing special required here
         return data
 
     def create(self, validated_data):
@@ -53,8 +45,8 @@ class PostSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         tags_data = validated_data.pop('tags', None)
-        instance.title = validated_data.get('title', instance.title)
-        instance.content = validated_data.get('content', instance.content)
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
         instance.save()
         if tags_data is not None:
             instance.tags.clear()
@@ -63,35 +55,11 @@ class PostSerializer(serializers.ModelSerializer):
                 instance.tags.add(tag)
         return instance
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        # Output tag names as list
-        rep['tags'] = [tag.name for tag in instance.tags.all()]
-        return rep
-
-    
-
-class TagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Tag
-        fields = "__all__"
-
-    def validate(self, data):
-        # Generate slug from title if not provided or empty
-        if not data.get('slug'):
-            base_slug = slugify(data.get('name', ''))
-            unique_slug = base_slug
-            counter = 1
-            # Check uniqueness
-            while Tag.objects.filter(slug=unique_slug).exists():
-                unique_slug = f"{base_slug}-{counter}"
-                counter += 1
-            data['slug'] = unique_slug
-        return data
-
 class CommentSerializer(serializers.ModelSerializer):
+    author = serializers.PrimaryKeyRelatedField(read_only=True)
+    post = serializers.PrimaryKeyRelatedField(queryset=Post.objects.all(), required=True)
+
     class Meta:
         model = Comment
         fields = "__all__"
-
-        
+        read_only_fields = ["slug", "author", "created_at", "updated_at"]
