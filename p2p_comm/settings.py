@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv
 from celery import Celery
+import os
 def get_env(key, default=None, cast=str, required=False):
     """
     Get environment variable via python-decouple.
@@ -46,6 +47,9 @@ INSTALLED_APPS = [
 
     "drf_spectacular",
     "corsheaders",
+
+    "django_celery_results",
+    "django_celery_beat",  
 
     # your apps
     'p2p_messages', # make sure this app exists
@@ -226,6 +230,8 @@ CACHES = {
         }
     }
 }
+POSTS_CACHE_TTL = int(os.getenv("POSTS_CACHE_TTL", 300))
+COMMENTS_CACHE_TTL = int(os.getenv("COMMENTS_CACHE_TTL", 180))
 from django.core.cache import cache
 
 def set_welcome_message():

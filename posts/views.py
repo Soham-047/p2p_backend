@@ -46,7 +46,6 @@ class PostListCreateView(APIView):
                     "title": "My First Post",
                     "content": "This is the content of my first post.",
                     "tags": ["django", "rest"],
-                    "author": 1,
                 },
                 request_only=True,
                 response_only=False,
