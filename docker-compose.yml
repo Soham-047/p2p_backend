@@ -3,6 +3,8 @@ services:
     image: redis:alpine
     ports:
       - "6379:6379"
+    networks:
+      - p2p-network
 
   web:
     build: .
@@ -16,6 +18,11 @@ services:
       - db
     env_file:
       - .env
+    environment:
+      - DATABASE_HOST=db
+      - REDIS_HOST=redis
+    networks:
+      - p2p-network
 
   celery:
     build: .
@@ -27,6 +34,11 @@ services:
       - db
     env_file:
       - .env
+    environment:
+      - DATABASE_HOST=db
+      - REDIS_HOST=redis
+    networks:
+      - p2p-network
 
   db:
     image: postgres:13
@@ -36,6 +48,12 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+    networks:
+      - p2p-network
 
 volumes:
   postgres_data:
+
+networks:
+  p2p-network:
+    driver: bridge
