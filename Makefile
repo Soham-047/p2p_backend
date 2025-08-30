@@ -1,5 +1,5 @@
 start:
-	docker-compose up --build -d web celery
+	docker-compose up --build -d
 	docker-compose logs -f web
 
 stop:
