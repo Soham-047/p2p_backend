@@ -1,5 +1,6 @@
 start:
-	docker-compose up --build web celery
+	docker-compose up --build -d web celery
+	docker-compose logs -f web
 
 stop:
 	docker-compose down
@@ -9,3 +10,9 @@ logs:
 
 migrate:
 	docker-compose run --rm web python manage.py migrate
+
+shell:
+	docker-compose run --rm web python manage.py shell
+
+createsuperuser:
+	docker-compose run --rm web python manage.py createsuperuser

@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "corsheaders",
 
     "django_celery_results",
-    "django_celery_beat",  
+    # "django_celery_beat",  
 
     # your apps
     'p2p_messages', # make sure this app exists
@@ -60,6 +60,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Corsheaders middleware
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     # CSRF middleware stays for admin/session pages; JWT API views don't use it
@@ -67,14 +69,11 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    # Corsheaders middleware
-    "corsheaders.middleware.CorsMiddleware",
 ]
 
 FERNET_KEY = get_env('FERNET_KEY', required=True).encode('utf-8')
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ORIGIN_ALLOW_ALL = True
-CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_CREDENTIALS = True
 ROOT_URLCONF = "p2p_comm.urls"
 
@@ -95,15 +94,6 @@ TEMPLATES = [
 
 ASGI_APPLICATION = "p2p_comm.asgi.application"
 WSGI_APPLICATION = "p2p_comm.wsgi.application"
-
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [('127.0.0.1', 6379)],
-        },
-    },
-}
 
 
 # This one block of code handles everything for you.
@@ -206,13 +196,40 @@ DEFAULT_FROM_EMAIL = get_env("EMAIL_ID", required=True)
 # (Don't add here unless you need it.)
 
 
-# CELERy TASKS
+# Redis configuration
+REDIS_HOST = get_env('REDIS_HOST', 'redis')
+REDIS_PORT = get_env('REDIS_PORT', '6379')
+
+# Channel layers
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [(REDIS_HOST, REDIS_PORT)],
+        },
+    },
+}
+
+# Celery configuration
+CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+
+# Caching
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
 app = Celery("p2p_comm")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
-CELERY_BROKER_URL = "redis://redis:6379/0"
-CELERY_RESULT_BACKEND = "redis://redis:6379/0"
+# CELERY_BROKER_URL = "redis://redis:6379/0"
+# CELERY_RESULT_BACKEND = "redis://redis:6379/0"
 
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
