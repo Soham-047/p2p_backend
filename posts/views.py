@@ -7,6 +7,7 @@ from .serializers import (
     PostSerializer,
     TagSerializer,
     CommentSerializer,
+    ReplySerializer
 )
 from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Tag
@@ -342,41 +343,47 @@ class ListCommentsPost(APIView):
         return Response(serializer.data)
 
 
-class ListCommentReplies(APIView):
+class ListCreateCommentReplies(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = CommentSerializer
+    serializer_class = ReplySerializer
 
     @extend_schema(
         summary="List all replies to a comment",
         description="Return all reply comments for a comment identified by slug.",
-        responses={
-            200: CommentSerializer(many=True),
-            404: OpenApiResponse(description="Comment not found"),
-        },
+        responses={200: ReplySerializer(many=True), 404: OpenApiResponse(description="Comment not found")},
         tags=["Comments"],
-        examples=[
-            OpenApiExample(
-                "Example response",
-                value=[
-                    {
-                        "content": "This is a reply comment.",
-                        "post": 1,
-                        "parent": "comment-slug",
-                        "slug": "reply-slug",
-                    }
-                ],
-                response_only=True,
-            )
-        ],
     )
     def get(self, request, slug):
         try:
             comment = Comment.objects.get(slug=slug)
         except Comment.DoesNotExist:
             return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
-        replies = Comment.objects.filter(parent=comment)
-        serializer = CommentSerializer(replies, many=True)
+
+        replies = comment.replies.all()  # uses related_name='replies'
+        serializer = ReplySerializer(replies, many=True)
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="Create a reply to a comment",
+        description="Create a reply for a specific comment identified by slug.",
+        request=ReplySerializer,
+        responses={201: ReplySerializer, 404: OpenApiResponse(description="Comment not found")},
+        tags=["Comments"],
+    )
+    def post(self, request, slug):
+        try:
+            parent_comment = Comment.objects.get(slug=slug)
+        except Comment.DoesNotExist:
+            return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ReplySerializer(
+            data=request.data,
+            context={"request": request, "parent_comment": parent_comment},
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LikesCount(APIView):
@@ -447,3 +454,20 @@ class UnlikePost(APIView):
 
         post.likes.remove(request.user)
         return Response({"detail": "Post unliked successfully"},status=status.HTTP_200_OK)
+    
+
+class LikeComment(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Like a comment",
+        responses={200: OpenApiResponse(description="Comment liked successfully")},
+        tags=["Likes"],
+    )
+    def put(self, request, slug):
+        try:
+            comment = Comment.objects.get(slug=slug)
+        except Comment.DoesNotExist:
+            return Response({"detail": "Comment not found"},status=status.HTTP_404_NOT_FOUND)
+        comment.likes.add(request.user)
+        return Response({"detail": "Comment liked successfully"},status=status.HTTP_200_OK)
