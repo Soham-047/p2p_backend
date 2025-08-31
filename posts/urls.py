@@ -13,6 +13,7 @@ from .views import (
     UnlikePost,
     ListCreateCommentReplies,
     LikeComment,
+    SearchView,
 )
 
 urlpatterns = [
@@ -53,5 +54,8 @@ urlpatterns = [
 
     #Like a comment
     path("comments/<slug:slug>/like/", LikeComment.as_view(), name="like-comment"),
+
+    #urls for search on Posts and Users
+    path("search/", SearchView.as_view(), name="search"),
 ]
 

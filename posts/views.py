@@ -7,8 +7,15 @@ from .serializers import (
     PostSerializer,
     TagSerializer,
     CommentSerializer,
-    ReplySerializer
+    ReplySerializer,
+    UserSearchSerializer,
+    PostSearchSerializer,
 )
+from django.db import models
+from users.models import CustomUser as User
+from django.db.models import Q, Value
+from django.db.models.functions import Concat
+from django.contrib.postgres.search import SearchVector, TrigramSimilarity
 from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Tag
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
@@ -409,7 +416,8 @@ class LikesCount(APIView):
                 {"detail": "Post not found"}, status=status.HTTP_404_NOT_FOUND
             )
         count = post.likes.count()
-        return Response({"count": count})
+        is_like = post.likes.filter(id=request.user.id).exists()
+        return Response({"count": count, "is_like": is_like})
     
 class LikePost(APIView):
     permission_classes = [IsAuthenticated]
@@ -471,3 +479,58 @@ class LikeComment(APIView):
             return Response({"detail": "Comment not found"},status=status.HTTP_404_NOT_FOUND)
         comment.likes.add(request.user)
         return Response({"detail": "Comment liked successfully"},status=status.HTTP_200_OK)
+
+
+
+
+
+class SearchView(APIView):
+    """
+    A unified search endpoint for users (people) and posts.
+    - `?q=<query>`: The term to search for.
+    - `?type=<people|posts>`: The category to search within.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        query = request.query_params.get('q', None)
+        search_type = request.query_params.get('type', 'posts') # Default to searching posts
+
+        if not query:
+            return Response({"error": "A search query parameter 'q' is required."}, status=400)
+
+        queryset = []
+        serializer_class = None
+
+        if search_type == 'people':
+            # Searches for similar-sounding usernames with typo tolerance
+            queryset = User.objects.annotate(
+                similarity=TrigramSimilarity('username', query),
+            ).filter(similarity__gt=0.3).order_by('-similarity')
+            serializer_class = UserSearchSerializer
+
+        elif search_type == 'posts':
+            # Combines Full-Text Search and Trigram Similarity on title and content
+            queryset = Post.objects.filter(published=True).annotate(
+                similarity=TrigramSimilarity(
+                    # Add output_field=models.TextField() to the Concat function
+                    Concat('title', Value(' '), 'content', output_field=models.TextField()),
+                    query
+                ),
+                search=SearchVector('title', 'content'), # Removed 'tags__name'
+            ).filter(
+                Q(search=query) | Q(similarity__gt=0.3)
+            ).order_by('-similarity')
+            serializer_class = PostSearchSerializer
+            
+        else:
+            return Response(
+                {"error": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."}, 
+                status=400
+            )
+
+        if serializer_class:
+            serializer = serializer_class(queryset, many=True)
+            return Response(serializer.data)
+            
+        return Response([])

@@ -22,12 +22,15 @@ class TagSerializer(serializers.ModelSerializer):
 
 class PostSerializer(serializers.ModelSerializer):
     tags = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
+    tag_names = serializers.SlugRelatedField(
+        many=True, read_only=True, slug_field="name", source="tags"
+    )
     author = serializers.CharField(source='author.full_name', read_only=True)
     slug = serializers.CharField(read_only=True)
 
     class Meta:
         model = Post
-        fields = ['title', 'content', 'slug', 'tags', 'author', 'published', 'created_at', 'updated_at']
+        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author', 'published', 'created_at', 'updated_at']
         read_only_fields = ['slug', 'author', 'created_at', 'updated_at']
 
     def validate(self, data):
@@ -84,3 +87,25 @@ class ReplySerializer(serializers.ModelSerializer):
         )
         return reply
 
+# search/serializers.py
+
+
+
+class UserSearchSerializer(serializers.ModelSerializer):
+    """
+    Serializer for representing users in search results.
+    """
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'username', 'full_name']
+
+class PostSearchSerializer(serializers.ModelSerializer):
+    """
+    Serializer for representing posts in search results.
+    The 'tags' field has been removed.
+    """
+    author = UserSearchSerializer(read_only=True)
+
+    class Meta:
+        model = Post
+        fields = ['title', 'slug', 'author', 'created_at']
