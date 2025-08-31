@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from .models import Message
-from .serializers import MessageSerializer, MessageDecryptSerializer
-from django.db.models import Q
+from .serializers import MessageSerializer, MessageDecryptSerializer, UserSerializer, RecentChatSerializer
+from django.db.models import Q,Subquery, OuterRef
 import json
 from django.conf import settings
 from django.http import JsonResponse, HttpResponseForbidden
@@ -19,6 +19,7 @@ from users.models import CustomUser as User
 from drf_spectacular.openapi import OpenApiResponse
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
+from django.db.models.functions import Least, Greatest
 class MessageListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -146,7 +147,7 @@ class ChatHistoryView(APIView):
             }
             # Decrypt the message content
             try:
-                decrypted_text = fernet.decrypt(msg.ciphertext).decode('utf-8')
+                decrypted_text = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
                 message_data['message'] = decrypted_text
             except InvalidToken:
                 message_data['message'] = "[Decryption Failed]"
@@ -155,3 +156,51 @@ class ChatHistoryView(APIView):
             response_data.append(message_data)
         
         return Response(response_data)
+    
+
+
+
+class RecentChatsAPIView(APIView):
+    """
+    Provides a list of recent chats for the authenticated user.
+    Each chat is represented by its most recent message.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        # 1. Annotate messages with a consistent ID for each conversation pair.
+        #    Least/Greatest ensures that a chat between user 1 and 2 is the
+        #    same as a chat between user 2 and 1.
+        messages = Message.objects.annotate(
+            chat_id_1=Least('sender_id', 'receiver_id'),
+            chat_id_2=Greatest('sender_id', 'receiver_id')
+        )
+
+        # 2. Filter these messages to only include those involving the current user.
+        messages = messages.filter(Q(sender=user) | Q(receiver=user))
+
+        # 3. Order by the consistent chat ID and then by timestamp descending.
+        #    Then, get the distinct (first) message for each chat, which will
+        #    be the latest one because of the ordering.
+        recent_messages = messages.order_by(
+            'chat_id_1', 
+            'chat_id_2', 
+            '-timestamp'
+        ).distinct(
+            'chat_id_1', 
+            'chat_id_2'
+        )
+
+        # A more readable, but potentially less performant approach for non-PostgreSQL DBs
+        # is to loop, but this is generally discouraged due to the N+1 query problem.
+        # The query above is preferred.
+
+        # Serialize the final list of messages
+        serializer = RecentChatSerializer(
+            recent_messages, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
