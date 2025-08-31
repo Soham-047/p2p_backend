@@ -22,7 +22,7 @@ class TagSerializer(serializers.ModelSerializer):
 
 class PostSerializer(serializers.ModelSerializer):
     tags = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
-    author = serializers.CharField(source='author.username', read_only=True)
+    author = serializers.CharField(source='author.full_name', read_only=True)
     slug = serializers.CharField(read_only=True)
 
     class Meta:
@@ -56,10 +56,31 @@ class PostSerializer(serializers.ModelSerializer):
         return instance
 
 class CommentSerializer(serializers.ModelSerializer):
-    author = serializers.PrimaryKeyRelatedField(read_only=True)
+    author = serializers.CharField(source='author.full_name', read_only=True)
     post = serializers.PrimaryKeyRelatedField(queryset=Post.objects.all(), required=True)
 
     class Meta:
         model = Comment
         fields = "__all__"
         read_only_fields = ["slug", "author", "created_at", "updated_at"]
+
+
+
+class ReplySerializer(serializers.ModelSerializer):
+    author = serializers.CharField(source="author.full_name", read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = ["slug", "content", "author", "parent", "post", "created_at", "updated_at"]
+        read_only_fields = ["slug", "author", "parent", "post", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        parent_comment = self.context["parent_comment"]
+        reply = Comment.objects.create(
+            parent=parent_comment,
+            post=parent_comment.post,
+            author=self.context["request"].user,
+            content=validated_data["content"],
+        )
+        return reply
+

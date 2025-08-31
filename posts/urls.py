@@ -5,13 +5,14 @@ from .views import (
     PostCommentsView,
     CommentDetailView,
     ListCommentsPost,
-    ListCommentReplies,
     ListTags,
     DeleteCommentView,
     CommentCountView,
     LikesCount,
     LikePost,
     UnlikePost,
+    ListCreateCommentReplies,
+    LikeComment,
 )
 
 urlpatterns = [
@@ -28,9 +29,7 @@ urlpatterns = [
     # COMMENTS - Parent comments for a post
     path('list-comments/<slug:slug>/', ListCommentsPost.as_view(), name='list-comments'),
 
-    # COMMENTS - List replies to a comment
-    path('list-replies/<slug:slug>/', ListCommentReplies.as_view(), name='list-replies'),
-
+    
     # COMMENTS - Count comments (across all or filtered by post)
     path('count-comments/<slug:slug>/', CommentCountView.as_view(), name='count-comments'),
 
@@ -48,5 +47,11 @@ urlpatterns = [
 
     #Unlike a post
     path('<slug:slug>/unlike-post/', UnlikePost.as_view(), name='unlike-post'),
+
+    #create and list Reply to a comment
+    path("comments/<slug:slug>/replies/", ListCreateCommentReplies.as_view(), name="comment-replies"),
+
+    #Like a comment
+    path("comments/<slug:slug>/like/", LikeComment.as_view(), name="like-comment"),
 ]
 
