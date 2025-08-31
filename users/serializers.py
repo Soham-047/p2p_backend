@@ -81,6 +81,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField(read_only=True)
 
     experiences = ExperienceSerializer(many=True, read_only=True)
+    educations = EducationSerializer(many=True, read_only=True)
+    skills = SkillSerializer(many=True, read_only=True)
 
     class Meta:
         model = Profile
@@ -88,7 +90,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "username", "full_name", "email", "secondary_email",
             "batch", "is_current_student",
             "headline", "about", "location",
-            "experiences", "links",   # keep links JSON
+            "experiences", "educations", "skills", "links",   # keep links JSON
             "avatar", "avatar_base64", "avatar_url", "updated_at",
         ]
         read_only_fields = ["updated_at"]
