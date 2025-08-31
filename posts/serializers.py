@@ -22,7 +22,7 @@ class TagSerializer(serializers.ModelSerializer):
 
 class PostSerializer(serializers.ModelSerializer):
     tags = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
-    author = serializers.PrimaryKeyRelatedField(read_only=True)
+    author = serializers.CharField(source='author.username', read_only=True)
     slug = serializers.CharField(read_only=True)
 
     class Meta:
