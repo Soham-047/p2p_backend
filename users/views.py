@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from rest_framework.decorators import api_view, permission_classes
-from .serializers import RegistrationSerializer, ProfileSerializer, PublicProfileSerializer, MeProfileSerializer
+from .serializers import RegistrationSerializer, ProfileSerializer, PublicProfileSerializer, MeProfileSerializer, AvatarSerializer
 from .models import Profile
 from .utils import make_username_from_email, make_random_password
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -17,12 +17,15 @@ from rest_framework.generics import RetrieveAPIView, ListAPIView
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse, OpenApiExample
+from io import BytesIO
 from django.http import HttpResponse, Http404
 from rest_framework import status
 from django.db.models import Q
 from users.tasks import send_registration_email, log_user_activity
 import base64
-
+from PIL import Image
+from .models import Experience, Skill, Education
+from .serializers import ExperienceSerializer, SkillSerializer, EducationSerializer
 User = get_user_model()
 
 class RegistrationAPIView(APIView):
@@ -305,49 +308,122 @@ def profile_avatar_view(request, username):
     },
     tags=["Profile"]
 )
+
 class MeAvatarUploadView(APIView):
+    """
+    Manage the current user's avatar (upload, retrieve).
+    """
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    @extend_schema(
+        summary="Upload or update current user's avatar",
+        description="Upload a new avatar image (file upload or base64 JSON). "
+                    "Validates size and type. Overwrites any existing avatar.",
+        request=AvatarSerializer,
+        responses={
+            200: OpenApiResponse(description="Avatar updated successfully"),
+            400: OpenApiResponse(description="Invalid input"),
+        },
+        tags=["Profile"]
+    )
     def post(self, request):
-        profile = request.user.profile
-        avatar_file = request.FILES.get("avatar")
-        avatar_b64 = request.data.get("avatar_base64")
-
-        if not avatar_file and not avatar_b64:
-            return Response({"detail": "No avatar provided"}, status=400)
-
-        if avatar_file:
-            profile.avatar_blob = avatar_file.read()
-            profile.avatar_content_type = avatar_file.content_type
-            profile.avatar_filename = avatar_file.name
-            profile.avatar_size = avatar_file.size
-        else:
-            try:
-                blob = base64.b64decode(avatar_b64)
-            except Exception:
-                return Response({"detail": "Invalid base64"}, status=400)
-            profile.avatar_blob = blob
-            profile.avatar_content_type = "image/png"  # assume png if base64
-            profile.avatar_filename = "avatar.png"
-            profile.avatar_size = len(blob)
-
-        profile.save()
-        log_user_activity.delay(request.user.id, "Updated avatar")
-
-        return Response({"detail": "Avatar updated successfully"})
+        serializer = AvatarSerializer(
+            instance=request.user.profile,
+            data=request.data,
+            partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            log_user_activity.delay(request.user.id, "Updated avatar")
+            return Response({"detail": "Avatar updated successfully"}, status=200)
+        return Response(serializer.errors, status=400)
 
     @extend_schema(
         summary="Get current user's avatar",
         description="Returns the avatar binary stream if uploaded, else 404.",
-        responses={200: {"content": {"image/png": {}}}, 404: {"description": "No avatar"}},
+        responses={200: {"content": {"image/*": {}}},
+                   404: {"description": "No avatar"}},
         tags=["Profile"]
     )
     def get(self, request):
         profile = request.user.profile
         if not profile.has_avatar():
             raise Http404("No avatar")
-        return HttpResponse(
+
+        response = HttpResponse(
             profile.avatar_blob,
             content_type=profile.avatar_content_type or "application/octet-stream"
         )
+        # Ensures browser treats it as an inline image (renders instead of download prompt)
+        response['Content-Disposition'] = (
+            f'inline; filename="{profile.avatar_filename or "avatar"}"'
+        )
+        return response
+    
+class MeAvatarThumbnailView(APIView):
+    """
+    Returns a resized thumbnail version of the current user's avatar.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Get current user's avatar thumbnail",
+        description="Returns a resized thumbnail (default 128x128) of the user's avatar.",
+        responses={200: {"content": {"image/*": {}}},
+                   404: {"description": "No avatar"}},
+        tags=["Profile"]
+    )
+    def get(self, request, size: int = 128):
+        profile = request.user.profile
+        if not profile.has_avatar():
+            raise Http404("No avatar")
+
+        # Load avatar into Pillow
+        try:
+            img = Image.open(BytesIO(profile.avatar_blob))
+            img = img.convert("RGB")  # Ensure consistent format
+            img.thumbnail((size, size))
+        except Exception:
+            raise Http404("Corrupted avatar image")
+
+        # Save resized version to buffer
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        buffer.seek(0)
+
+        response = HttpResponse(buffer.getvalue(), content_type="image/jpeg")
+        response['Content-Disposition'] = f'inline; filename="avatar_thumbnail.jpg"'
+        return response
+    
+class ExperienceViewSet(viewsets.ModelViewSet):
+    serializer_class = ExperienceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Experience.objects.filter(profile=self.request.user.profile)
+
+    def perform_create(self, serializer):
+        serializer.save(profile=self.request.user.profile)
+
+
+class SkillViewSet(viewsets.ModelViewSet):
+    serializer_class = SkillSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Skill.objects.filter(profile=self.request.user.profile)
+
+    def perform_create(self, serializer):
+        serializer.save(profile=self.request.user.profile)
+
+
+class EducationViewSet(viewsets.ModelViewSet):
+    serializer_class = EducationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Education.objects.filter(profile=self.request.user.profile)
+
+    def perform_create(self, serializer):
+        serializer.save(profile=self.request.user.profile)

@@ -1,23 +1,43 @@
 # users/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, RegistrationAPIView, MeProfileView, PublicProfileView, profile_avatar_view, ProfileSearchView, MeAvatarUploadView
+from .views import (
+    UserViewSet,
+    RegistrationAPIView,
+    MeProfileView,
+    PublicProfileView,
+    profile_avatar_view,
+    ProfileSearchView,
+    MeAvatarUploadView,
+    MeAvatarThumbnailView,
+    # new section viewsets
+    ExperienceViewSet,
+    SkillViewSet,
+    EducationViewSet,
+)
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 router = DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
 
+# Add LinkedIn-like section endpoints
+router.register(r"profile/me/experiences", ExperienceViewSet, basename="experience")
+router.register(r"profile/me/skills", SkillViewSet, basename="skill")
+router.register(r"profile/me/education", EducationViewSet, basename="education")
+
 urlpatterns = [
     path("", include(router.urls)),
+
+    # Auth
     path("auth/register/", RegistrationAPIView.as_view(), name="api-register"),
     path("auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 
-    path('profile/me/', MeProfileView.as_view(), name='profile-me'),
-    path('profile/me/avatar/', MeAvatarUploadView.as_view(), name='profile-me-avatar-upload'),  # POST/PUT
-    # path('profile/me/avatar/', me_avatar_view, name='profile-me-avatar'),
+    # Profile
+    path("profile/me/", MeProfileView.as_view(), name="profile-me"),
+    path("profile/me/avatar/", MeAvatarUploadView.as_view(), name="profile-me-avatar-upload"),  # full avatar
+    path("profile/me/avatar/thumbnail/", MeAvatarThumbnailView.as_view(), name="profile-me-avatar-thumbnail"),  # thumbnail avatar
     path("profile/search/", ProfileSearchView.as_view(), name="profile-search"),
     path("profile/<str:username>/", PublicProfileView.as_view(), name="profile-public"),
     path("profile/<str:username>/avatar/", profile_avatar_view, name="profile-avatar"),
 ]
-
