@@ -71,7 +71,7 @@ class Skill(models.Model):
 
 
 class Education(models.Model):
-    profile = models.ForeignKey("Profile", related_name="education", on_delete=models.CASCADE)
+    profile = models.ForeignKey("Profile", related_name="educations", on_delete=models.CASCADE)
     school = models.CharField(max_length=255)
     degree = models.CharField(max_length=255, blank=True)
     field_of_study = models.CharField(max_length=255, blank=True)
