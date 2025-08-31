@@ -427,3 +427,7 @@ class EducationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(profile=self.request.user.profile)
+
+
+
+
