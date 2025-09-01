@@ -29,3 +29,6 @@ USER appuser
 ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Default command: start Gunicorn
+CMD ["gunicorn", "p2p_comm.wsgi:application", "--bind", "0.0.0.0:${PORT:-8000}"]
