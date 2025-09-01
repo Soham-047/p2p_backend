@@ -3,35 +3,36 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from .models import Message
-from .serializers import MessageSerializer, MessageDecryptSerializer, UserSerializer, RecentChatSerializer
-from django.db.models import Q,Subquery, OuterRef
-import json
+from django.db.models import Q
 from django.conf import settings
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from django.utils.decorators import method_decorator
-from django.contrib.auth.decorators import login_required
-from django.views import View
+
 from cryptography.fernet import Fernet, InvalidToken
-from .models import Message
+
 from users.models import CustomUser as User
-from drf_spectacular.openapi import OpenApiResponse
+from .models import Message
+from .serializers import (
+    MessageSerializer,
+    MessageDecryptSerializer,
+    RecentChatSerializer,
+)
+
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
-from django.db.models.functions import Least, Greatest
+
 from django.core.cache import cache
-from .redis_helpers import r, chat_key, recent_chats_key, unread_key
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-
-
+from .redis_helpers import r, recent_chats_key, unread_key
 from .tasks import (
     invalidate_recent_chats_cache,
     increment_unread_counter,
     send_realtime_notification,
 )
 
+
+# --------------------------
+# Create + List Messages
+# --------------------------
 class MessageListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -54,20 +55,18 @@ class MessageListCreateAPIView(APIView):
 
             return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
-        # Fetch messages where user is sender or receiver
         messages = Message.objects.filter(Q(sender=user) | Q(receiver=user)).order_by('-timestamp')
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
 
 
+# --------------------------
+# Decrypt a single message
+# --------------------------
 class DecryptMessageView(APIView):
-    """
-    Decrypts a message using DRF and Token Authentication.
-    """
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -81,45 +80,40 @@ class DecryptMessageView(APIView):
         },
         description='Decrypt a message.',
         summary='Decrypt message'
-        
     )
     def post(self, request, *args, **kwargs):
-        # Use the serializer to validate the incoming data
         serializer = MessageDecryptSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         message_id = serializer.validated_data['message_id']
-        
+
         try:
-            # 1. Get the message from the database
             message_obj = get_object_or_404(Message, id=message_id)
 
-            # 2. !! CRITICAL SECURITY CHECK !!
-            if request.user != message_obj.receiver and request.user != message_obj.sender:
+            if request.user not in [message_obj.sender, message_obj.receiver]:
                 return Response(
                     {"error": "You are not authorized to decrypt this message."},
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            # 3. If authorized, proceed with decryption
             fernet = Fernet(settings.FERNET_KEY)
             decrypted_text = fernet.decrypt(message_obj.ciphertext).decode('utf-8')
-            
+
             return Response({'decrypted_message': decrypted_text}, status=status.HTTP_200_OK)
 
         except InvalidToken:
             return Response({'error': 'Invalid or corrupt data.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
 
 
-
-
+# --------------------------
+# Chat history (decrypt all)
+# --------------------------
 @extend_schema(
     summary="Retrieve and Decrypt Chat History",
-    description="Fetches the full message history between the authenticated user and the specified user. It decrypts all messages on the server and returns a dictionary mapping each message ID to its plain text content.",
+    description="Fetches the full message history between the authenticated user and the specified user. It decrypts all messages and returns them.",
     parameters=[
         OpenApiParameter(
             name='username',
@@ -130,62 +124,57 @@ class DecryptMessageView(APIView):
         )
     ],
     responses={
-        200: OpenApiTypes.OBJECT, # Describes a dictionary/JSON object response
-        401: {"description": "Authentication credentials were not provided."},
-        404: {"description": "User with the specified username not found."}
+        200: OpenApiTypes.OBJECT,
+        401: {"description": "Authentication required"},
+        404: {"description": "User not found"}
     },
     examples=[
         OpenApiExample(
             "Successful Response Example",
             value={
-                "101": "Hello there!",
-                "102": "This is a decrypted message.",
-                "105": "[Decryption Failed]"
+                "id": 101,
+                "sender": "alice",
+                "receiver": "bob",
+                "timestamp": "2025-09-01T12:34:56Z",
+                "message": "Hello there!"
             }
         )
     ]
 )
-
 class ChatHistoryView(APIView):
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request, username, *args, **kwargs):
-        # The other user in the chat
         other_user = get_object_or_404(User, username=username)
-        
-        # Find all messages between the logged-in user and the other user
+
         messages = Message.objects.filter(
-            (Q(sender=request.user) & Q(receiver=other_user)) |
-            (Q(sender=other_user) & Q(receiver=request.user))
+            (Q(sender=request.user, receiver=other_user)) |
+            (Q(sender=other_user, receiver=request.user))
         ).order_by('timestamp')
-        
+
         fernet = Fernet(settings.FERNET_KEY)
-        # Initialize an empty list for our response data
         response_data = []
-        
+
         for msg in messages:
-            # For each message, create a dictionary
-            message_data = {
+            data = {
                 'id': msg.id,
                 'sender': msg.sender.username,
                 'receiver': msg.receiver.username,
                 'timestamp': msg.timestamp
             }
-            # Decrypt the message content
             try:
-                decrypted_text = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
-                message_data['message'] = decrypted_text
+                data['message'] = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
             except InvalidToken:
-                message_data['message'] = "[Decryption Failed]"
-            
-            # Add the complete message dictionary to our list
-            response_data.append(message_data)
-        
+                data['message'] = "[Decryption Failed]"
+
+            response_data.append(data)
+
         return Response(response_data)
-    
 
 
-
+# --------------------------
+# Recent Chats
+# --------------------------
 class RecentChatsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -196,14 +185,10 @@ class RecentChatsAPIView(APIView):
             return Response(cached)
 
         user = request.user
-        from django.db.models.functions import Least, Greatest
-        from django.db.models import Q
-        from .serializers import RecentChatSerializer
-        from .models import Message
 
         messages = Message.objects.annotate(
-            chat_id_1=Least('sender_id', 'receiver_id'),
-            chat_id_2=Greatest('sender_id', 'receiver_id')
+            chat_id_1=models.functions.Least('sender_id', 'receiver_id'),
+            chat_id_2=models.functions.Greatest('sender_id', 'receiver_id')
         ).filter(Q(sender=user) | Q(receiver=user)) \
          .order_by('chat_id_1', 'chat_id_2', '-timestamp') \
          .distinct('chat_id_1', 'chat_id_2')
@@ -211,28 +196,24 @@ class RecentChatsAPIView(APIView):
         data = RecentChatSerializer(messages, many=True, context={'request': request}).data
         cache.set(key, data, timeout=settings.CACHE_TTL_MED)
         return Response(data)
-    
 
+
+# --------------------------
+# Unread Counts
+# --------------------------
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def unread_counts(request):
-    """
-    Returns a dict {other_user_id: unread_count}
-    """
     counts = r().hgetall(unread_key(request.user.id))  # {b'2': b'3', ...}
     result = {int(k.decode()): int(v.decode()) for k, v in counts.items()}
     return Response(result)
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def mark_read(request):
-    """
-    Body: {"other_user_id": 123}
-    Resets unread count for conversation (other_user_id -> 0)
-    """
     other_id = int(request.data.get("other_user_id"))
     r().hdel(unread_key(request.user.id), str(other_id))
     return Response({"ok": True})

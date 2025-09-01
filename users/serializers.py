@@ -67,6 +67,14 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             "avatar_url",
         ]
 
+    def get_avatar_url(self, obj):
+        request = self.context.get("request")
+        if obj and obj.has_avatar() and request:
+            return request.build_absolute_uri(
+                f"/api/profile/{obj.user.username}/avatar/"
+            )
+        return None
+
 
 # -------------------------------
 # Profile Serializer (Owner)
