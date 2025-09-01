@@ -26,7 +26,34 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 
+from .tasks import (
+    invalidate_recent_chats_cache,
+    increment_unread_counter,
+    send_realtime_notification,
+)
+
 class MessageListCreateAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = MessageSerializer(data=request.data)
+        if serializer.is_valid():
+            msg = serializer.save(sender=request.user)
+
+            # Async tasks
+            invalidate_recent_chats_cache.delay(request.user.id, msg.receiver_id)
+            increment_unread_counter.delay(msg.receiver_id, msg.sender_id)
+
+            payload = {
+                "id": msg.id,
+                "sender": msg.sender.username,
+                "receiver": msg.receiver.username,
+                "timestamp": msg.timestamp.isoformat(),
+            }
+            send_realtime_notification.delay(msg.receiver_id, payload)
+
+            return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -35,38 +62,6 @@ class MessageListCreateAPIView(APIView):
         messages = Message.objects.filter(Q(sender=user) | Q(receiver=user)).order_by('-timestamp')
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
-
-    def post(self, request):
-        serializer = MessageSerializer(data=request.data)
-        if serializer.is_valid():
-            msg = serializer.save(sender=request.user)
-
-            # 1) Invalidate recent chats cache for both users
-            cache.delete_many([
-                recent_chats_key(request.user.id),
-                recent_chats_key(msg.receiver_id),
-            ])
-
-            # 2) Increment per-peer unread counter in Redis
-            # HINCRBY unread:{receiver_id} {sender_id} +1
-            r().hzincrby if False else None  # (just to avoid formatting confusion)
-            r().hincrby(unread_key(msg.receiver_id), str(msg.sender_id), 1)
-
-            # 3) Publish real-time notification to receiver
-            channel_layer = get_channel_layer()
-            payload = {
-                "id": msg.id,
-                "sender": msg.sender.username,
-                "receiver": msg.receiver.username,
-                "timestamp": msg.timestamp.isoformat(),
-            }
-            async_to_sync(channel_layer.group_send)(
-                f"user_{msg.receiver_id}",
-                {"type": "chat_message", "payload": {"event": "NEW_MESSAGE", "data": payload}},
-            )
-
-            return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DecryptMessageView(APIView):
