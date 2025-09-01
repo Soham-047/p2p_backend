@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Profile, Experience, Skill, Education
+from .models import Profile, Experience, Skill, Education, Links
 import base64
 
 User = get_user_model()
@@ -43,6 +43,11 @@ class EducationSerializer(serializers.ModelSerializer):
         model = Education
         fields = ["id", "school", "degree", "field_of_study", "start_year", "end_year", "description"]
 
+class LinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Links
+        fields = ["id", "label", "url"]
+
 class PublicProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     full_name = serializers.CharField(source="user.full_name", read_only=True)
@@ -51,6 +56,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     experiences = ExperienceSerializer(many=True, read_only=True)
     skills = SkillSerializer(many=True, read_only=True)
     education = EducationSerializer(many=True, read_only=True)
+    links = LinkSerializer(many=True, read_only=True)
 
     class Meta:
         model = Profile
@@ -83,6 +89,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     experiences = ExperienceSerializer(many=True, read_only=True)
     educations = EducationSerializer(many=True, read_only=True)
     skills = SkillSerializer(many=True, read_only=True)
+    links = LinkSerializer(many=True, read_only=True)
 
     class Meta:
         model = Profile
