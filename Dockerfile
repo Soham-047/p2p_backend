@@ -31,5 +31,5 @@ ENV PYTHONUNBUFFERED=1
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Default command: start Gunicorn
-CMD ["sh", "-c", "gunicorn p2p_comm.asgi:application --bind 0.0.0.0:${PORT:-8000}"]
+CMD ["sh", "-c", "daphne p2p_comm.asgi:application --bind 0.0.0.0:${PORT:-8000}"]
 
