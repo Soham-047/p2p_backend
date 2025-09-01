@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY - change this in production
 SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DEBUG", default="False")
-
+print(get_env("DEBUG"))
 # Development hosts
 ALLOWED_HOSTS = get_env("ALLOWED_HOSTS").split(",")
 

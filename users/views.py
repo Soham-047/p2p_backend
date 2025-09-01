@@ -24,8 +24,8 @@ from django.db.models import Q
 from users.tasks import send_registration_email, log_user_activity
 import base64
 from PIL import Image
-from .models import Experience, Skill, Education
-from .serializers import ExperienceSerializer, SkillSerializer, EducationSerializer
+from .models import Experience, Skill, Education, Links
+from .serializers import ExperienceSerializer, SkillSerializer, EducationSerializer, LinkSerializer
 User = get_user_model()
 
 class RegistrationAPIView(APIView):
@@ -427,7 +427,5 @@ class EducationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(profile=self.request.user.profile)
-
-
 
 

@@ -30,7 +30,7 @@ class Profile(models.Model):
     location = models.CharField(max_length=120, blank=True)
     # Store experiences/links as JSON (works on SQLite and Postgres)
     # experiences = models.JSONField(default=list, blank=True)  # e.g., [{"title": "...", "company": "..."}]
-    links = models.JSONField(default=list, blank=True)        # e.g., [{"label":"GitHub","url":"..."}]
+    # links = models.JSONField(default=list, blank=True)        # e.g., [{"label":"GitHub","url":"..."}]
 
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -44,7 +44,12 @@ class Profile(models.Model):
         return bool(self.avatar_blob)
     def __str__(self):
         return f"Profile<{self.user.username}>"
-    
+
+class Links(models.Model):
+    profile = models.ForeignKey("Profile", related_name="links", on_delete=models.CASCADE)
+    label = models.CharField(max_length=120)
+    url = models.URLField()
+
 class Experience(models.Model):
     profile = models.ForeignKey("Profile", related_name="experiences", on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
