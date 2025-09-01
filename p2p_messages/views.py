@@ -20,6 +20,12 @@ from drf_spectacular.openapi import OpenApiResponse
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 from django.db.models.functions import Least, Greatest
+from django.core.cache import cache
+from .redis_helpers import r, chat_key, recent_chats_key, unread_key
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
+
 class MessageListCreateAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -33,8 +39,33 @@ class MessageListCreateAPIView(APIView):
     def post(self, request):
         serializer = MessageSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save(sender=request.user)  # Automatically set sender
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            msg = serializer.save(sender=request.user)
+
+            # 1) Invalidate recent chats cache for both users
+            cache.delete_many([
+                recent_chats_key(request.user.id),
+                recent_chats_key(msg.receiver_id),
+            ])
+
+            # 2) Increment per-peer unread counter in Redis
+            # HINCRBY unread:{receiver_id} {sender_id} +1
+            r().hzincrby if False else None  # (just to avoid formatting confusion)
+            r().hincrby(unread_key(msg.receiver_id), str(msg.sender_id), 1)
+
+            # 3) Publish real-time notification to receiver
+            channel_layer = get_channel_layer()
+            payload = {
+                "id": msg.id,
+                "sender": msg.sender.username,
+                "receiver": msg.receiver.username,
+                "timestamp": msg.timestamp.isoformat(),
+            }
+            async_to_sync(channel_layer.group_send)(
+                f"user_{msg.receiver_id}",
+                {"type": "chat_message", "payload": {"event": "NEW_MESSAGE", "data": payload}},
+            )
+
+            return Response(MessageSerializer(msg).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -161,46 +192,52 @@ class ChatHistoryView(APIView):
 
 
 class RecentChatsAPIView(APIView):
-    """
-    Provides a list of recent chats for the authenticated user.
-    Each chat is represented by its most recent message.
-    """
     permission_classes = [IsAuthenticated]
-    
-    def get(self, request, *args, **kwargs):
-        user = request.user
 
-        # 1. Annotate messages with a consistent ID for each conversation pair.
-        #    Least/Greatest ensures that a chat between user 1 and 2 is the
-        #    same as a chat between user 2 and 1.
+    def get(self, request, *args, **kwargs):
+        key = recent_chats_key(request.user.id)
+        cached = cache.get(key)
+        if cached:
+            return Response(cached)
+
+        user = request.user
+        from django.db.models.functions import Least, Greatest
+        from django.db.models import Q
+        from .serializers import RecentChatSerializer
+        from .models import Message
+
         messages = Message.objects.annotate(
             chat_id_1=Least('sender_id', 'receiver_id'),
             chat_id_2=Greatest('sender_id', 'receiver_id')
-        )
+        ).filter(Q(sender=user) | Q(receiver=user)) \
+         .order_by('chat_id_1', 'chat_id_2', '-timestamp') \
+         .distinct('chat_id_1', 'chat_id_2')
 
-        # 2. Filter these messages to only include those involving the current user.
-        messages = messages.filter(Q(sender=user) | Q(receiver=user))
+        data = RecentChatSerializer(messages, many=True, context={'request': request}).data
+        cache.set(key, data, timeout=settings.CACHE_TTL_MED)
+        return Response(data)
+    
 
-        # 3. Order by the consistent chat ID and then by timestamp descending.
-        #    Then, get the distinct (first) message for each chat, which will
-        #    be the latest one because of the ordering.
-        recent_messages = messages.order_by(
-            'chat_id_1', 
-            'chat_id_2', 
-            '-timestamp'
-        ).distinct(
-            'chat_id_1', 
-            'chat_id_2'
-        )
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 
-        # A more readable, but potentially less performant approach for non-PostgreSQL DBs
-        # is to loop, but this is generally discouraged due to the N+1 query problem.
-        # The query above is preferred.
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def unread_counts(request):
+    """
+    Returns a dict {other_user_id: unread_count}
+    """
+    counts = r().hgetall(unread_key(request.user.id))  # {b'2': b'3', ...}
+    result = {int(k.decode()): int(v.decode()) for k, v in counts.items()}
+    return Response(result)
 
-        # Serialize the final list of messages
-        serializer = RecentChatSerializer(
-            recent_messages, 
-            many=True, 
-            context={'request': request}
-        )
-        return Response(serializer.data)
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def mark_read(request):
+    """
+    Body: {"other_user_id": 123}
+    Resets unread count for conversation (other_user_id -> 0)
+    """
+    other_id = int(request.data.get("other_user_id"))
+    r().hdel(unread_key(request.user.id), str(other_id))
+    return Response({"ok": True})
