@@ -188,6 +188,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "60/min",  # tweak as needed
+    },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 REST_FRAMEWORK.update({
@@ -245,15 +248,17 @@ CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 
 # Caching
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
-    }
-}
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#         }
+#     }
+# }
+
+
 app = Celery("p2p_comm")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
@@ -277,6 +282,11 @@ CACHES = {
         }
     }
 }
+
+
+CACHE_TTL_SHORT = 60
+CACHE_TTL_MED = 60 * 5
+CACHE_TTL_LONG = 60 * 60
 POSTS_CACHE_TTL = int(os.getenv("POSTS_CACHE_TTL", 300))
 COMMENTS_CACHE_TTL = int(os.getenv("COMMENTS_CACHE_TTL", 180))
 from django.core.cache import cache

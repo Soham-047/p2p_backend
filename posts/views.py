@@ -19,6 +19,8 @@ from django.contrib.postgres.search import SearchVector, TrigramSimilarity
 from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Tag
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
+from .serializers import LikeCountSerializer
+from rest_framework import serializers
 
 
 
@@ -395,55 +397,61 @@ class ListCreateCommentReplies(APIView):
 
 class LikesCount(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = LikeCountSerializer
 
     @extend_schema(
-        summary="Get the count of likes for a comment",
-        responses={200: OpenApiResponse(description="Count of likes")},
+        summary="Get the count of likes for a post",
+        responses={200: LikeCountSerializer, 404: OpenApiResponse(description="Post not found")},
         tags=["Likes"],
-        examples=[
-            OpenApiExample(
-                "Example response",
-                value={"count": 10},
-                response_only=True,
-            )
-        ],
     )
     def get(self, request, slug):
         try:
             post = Post.objects.get(slug=slug)
-        except Post.DoesNotExist:        
-            return Response(
-                {"detail": "Post not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+        except Post.DoesNotExist:
+            return Response({"detail": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+
         count = post.likes.count()
         is_like = post.likes.filter(id=request.user.id).exists()
         return Response({"count": count, "is_like": is_like})
+
+
     
+# ---- Quick inline serializers for responses ----
+class SimpleDetailSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+class CountResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    is_like = serializers.BooleanField(required=False)
+
+
+# ---- Likes ----
 class LikePost(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = SimpleDetailSerializer
 
     @extend_schema(
         summary="Like a post",
-        responses={200: OpenApiResponse(description="Post liked successfully")},
+        responses={200: SimpleDetailSerializer, 404: OpenApiResponse(description="Post not found")},
         tags=["Likes"],
-        
     )
     def put(self, request, slug):
         try:
             post = Post.objects.get(slug=slug)
         except Post.DoesNotExist:
-            return Response({"detail": "Post not found"},status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
         post.likes.add(request.user)
-        return Response({"detail": "Post liked successfully"},status=status.HTTP_200_OK)
+        return Response({"detail": "Post liked successfully"}, status=status.HTTP_200_OK)
     
 class UnlikePost(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = SimpleDetailSerializer
 
     @extend_schema(
         summary="Unlike a post",
         responses={
-            200: OpenApiResponse(description="Post unliked successfully"),
-            400: OpenApiResponse(description="User has not liked this post"),
+            200: SimpleDetailSerializer,
+            400: SimpleDetailSerializer,
             404: OpenApiResponse(description="Post not found"),
         },
         tags=["Likes"],
@@ -452,85 +460,73 @@ class UnlikePost(APIView):
         try:
             post = Post.objects.get(slug=slug)
         except Post.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
 
         if not post.likes.filter(id=request.user.id).exists():
-            return Response(
-                {"detail": "You have not liked this post."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "You have not liked this post."}, status=status.HTTP_400_BAD_REQUEST)
 
         post.likes.remove(request.user)
-        return Response({"detail": "Post unliked successfully"},status=status.HTTP_200_OK)
-    
+        return Response({"detail": "Post unliked successfully"}, status=status.HTTP_200_OK)
 
 class LikeComment(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = SimpleDetailSerializer
 
     @extend_schema(
         summary="Like a comment",
-        responses={200: OpenApiResponse(description="Comment liked successfully")},
+        responses={200: SimpleDetailSerializer, 404: OpenApiResponse(description="Comment not found")},
         tags=["Likes"],
     )
     def put(self, request, slug):
         try:
             comment = Comment.objects.get(slug=slug)
         except Comment.DoesNotExist:
-            return Response({"detail": "Comment not found"},status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
         comment.likes.add(request.user)
-        return Response({"detail": "Comment liked successfully"},status=status.HTTP_200_OK)
-
-
+        return Response({"detail": "Comment liked successfully"}, status=status.HTTP_200_OK)
 
 
 
 class SearchView(APIView):
-    """
-    A unified search endpoint for users (people) and posts.
-    - `?q=<query>`: The term to search for.
-    - `?type=<people|posts>`: The category to search within.
-    """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Unified search for users or posts",
+        parameters=[
+            # you can add query params documentation here if you want
+        ],
+        responses={
+            200: OpenApiResponse(response=UserSearchSerializer(many=True), description="List of users (if type=people)"),
+            201: OpenApiResponse(response=PostSearchSerializer(many=True), description="List of posts (if type=posts)"),
+            400: SimpleDetailSerializer,
+        },
+        tags=["Search"],
+    )
     def get(self, request, *args, **kwargs):
         query = request.query_params.get('q', None)
-        search_type = request.query_params.get('type', 'posts') # Default to searching posts
+        search_type = request.query_params.get('type', 'posts')
 
         if not query:
-            return Response({"error": "A search query parameter 'q' is required."}, status=400)
-
-        queryset = []
-        serializer_class = None
+            return Response({"detail": "A search query parameter 'q' is required."}, status=400)
 
         if search_type == 'people':
-            # Searches for similar-sounding usernames with typo tolerance
             queryset = User.objects.annotate(
                 similarity=TrigramSimilarity('username', query),
             ).filter(similarity__gt=0.3).order_by('-similarity')
-            serializer_class = UserSearchSerializer
+            serializer = UserSearchSerializer(queryset, many=True)
+            return Response(serializer.data)
 
         elif search_type == 'posts':
-            # Combines Full-Text Search and Trigram Similarity on title and content
             queryset = Post.objects.filter(published=True).annotate(
                 similarity=TrigramSimilarity(
-                    # Add output_field=models.TextField() to the Concat function
                     Concat('title', Value(' '), 'content', output_field=models.TextField()),
                     query
                 ),
-                search=SearchVector('title', 'content'), # Removed 'tags__name'
+                search=SearchVector('title', 'content'),
             ).filter(
                 Q(search=query) | Q(similarity__gt=0.3)
             ).order_by('-similarity')
-            serializer_class = PostSearchSerializer
-            
-        else:
-            return Response(
-                {"error": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."}, 
-                status=400
-            )
-
-        if serializer_class:
-            serializer = serializer_class(queryset, many=True)
+            serializer = PostSearchSerializer(queryset, many=True)
             return Response(serializer.data)
-            
-        return Response([])
+
+        return Response({"detail": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."}, status=400)
