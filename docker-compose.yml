@@ -1,4 +1,4 @@
-version: "3.8"
+
 services:
   redis:
     image: redis:alpine
@@ -9,7 +9,7 @@ services:
 
   web:
     build: .
-    command: /app/entrypoint.sh gunicorn p2p_comm.wsgi:application --bind 0.0.0.0:8000
+    command: daphne -b 0.0.0.0 -p 8000 p2p_comm.asgi:application
     volumes:
       - .:/app
     ports:
