@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv
 from celery import Celery
-import os
+import os, urllib.parse
 def get_env(key, default=None, cast=str, required=False):
     """
     Get environment variable via python-decouple.
@@ -234,15 +234,20 @@ REDIS_HOST = get_env('REDIS_HOST', 'redis')
 REDIS_PORT = get_env('REDIS_PORT', '6379')
 
 # Channel layers
+url = urllib.parse.urlparse(os.environ["REDIS_URL"])
+
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [(REDIS_HOST, REDIS_PORT)],
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [{
+                "address": (url.hostname, url.port),
+                "password": url.password,
+                "ssl": url.scheme == "rediss",  # True because Upstash requires SSL
+            }],
         },
     },
 }
-
 # Celery configuration
 CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
@@ -276,10 +281,11 @@ CELERY_TIMEZONE = "Asia/Kolkata"
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://redis:6379/1",
+        "LOCATION": os.environ["REDIS_URL"] + "/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+            "SSL": True,  # optional, but makes it explicit
+        },
     }
 }
 
