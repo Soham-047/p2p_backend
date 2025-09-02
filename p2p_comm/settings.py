@@ -287,3 +287,11 @@ SIMPLE_JWT = {
 app = Celery("p2p_comm")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
+
+
+# settings.py
+
+# Cache TTL values (in seconds)
+CACHE_TTL_SHORT = 60       # 1 minute
+CACHE_TTL_MED = 300        # 5 minutes
+CACHE_TTL_LONG = 3600      # 1 hour

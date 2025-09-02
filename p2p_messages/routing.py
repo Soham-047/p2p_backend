@@ -8,7 +8,7 @@ django_asgi_app = get_asgi_application()
 
 websocket_urlpatterns = [
     re_path(r'ws/chat/(?P<username>[\w.@+-]+)/$', consumers.ChatConsumer.as_asgi()),
-    re_path(r"ws/test/$", consumers.TestConsumer.as_asgi()),
+    re_path(r"ws/test/$", consumers.ChatConsumer.as_asgi()),
 ]
 
 # application = ProtocolTypeRouter({
