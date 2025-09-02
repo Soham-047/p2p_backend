@@ -176,3 +176,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except User.DoesNotExist:
             # Handle the case where a user might not exist
             print(f"Error: User '{sender_username}' or '{receiver_username}' not found.")
+
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+from users.models import CustomUser
+import json
+
+class TestConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        await self.accept()
+        await self.send(text_data=json.dumps({"message": "WebSocket connected!"}))
+
+    async def disconnect(self, close_code):
+        print(f"Disconnected with code {close_code}")
+
+    async def receive(self, text_data=None, bytes_data=None):
+        data = json.loads(text_data)
+        await self.send(text_data=json.dumps({"echo": data}))

@@ -229,76 +229,57 @@ DEFAULT_FROM_EMAIL = get_env("EMAIL_ID", required=True)
 # (Don't add here unless you need it.)
 
 
-# Redis configuration
-REDIS_HOST = get_env('REDIS_HOST', 'redis')
-REDIS_PORT = get_env('REDIS_PORT', '6379')
+# -----------------------
+# Redis / Channel Layers / Celery / Cache
+# -----------------------
 
-# Channel layers
-url = urllib.parse.urlparse(os.environ["REDIS_URL"])
+REDIS_URL = get_env(
+    "REDIS_URL",
+    default="redis://localhost:6379/0"  # local fallback
+)
 
+# Channels
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [{
-                "address": (url.hostname, url.port),
-                "password": url.password,
-                "ssl": url.scheme == "rediss",  # True because Upstash requires SSL
-            }],
+            "hosts": [REDIS_URL],
         },
     },
 }
-# Celery configuration
-CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
-CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 
-# Caching
-# CACHES = {
-#     "default": {
-#         "BACKEND": "django_redis.cache.RedisCache",
-#         "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-#         "OPTIONS": {
-#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-#         }
-#     }
-# }
-
-
-app = Celery("p2p_comm")
-app.config_from_object("django.conf:settings", namespace="CELERY")
-app.autodiscover_tasks()
-
-# CELERY_BROKER_URL = "redis://redis:6379/0"
-# CELERY_RESULT_BACKEND = "redis://redis:6379/0"
-
+# Celery
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
 
-# Chaching
-# If you’re caching with Redis
+# Caching
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.environ["REDIS_URL"] + "/1",
+        "LOCATION": REDIS_URL + "/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "SSL": True,  # optional, but makes it explicit
         },
     }
 }
 
+# -----------------------------
+# JWT / DRF
+# -----------------------------
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+}
 
-CACHE_TTL_SHORT = 60
-CACHE_TTL_MED = 60 * 5
-CACHE_TTL_LONG = 60 * 60
-POSTS_CACHE_TTL = int(os.getenv("POSTS_CACHE_TTL", 300))
-COMMENTS_CACHE_TTL = int(os.getenv("COMMENTS_CACHE_TTL", 180))
-from django.core.cache import cache
-
-def set_welcome_message():
-    try:
-        cache.set("welcome_message", "Hello Redis!", timeout=60)
-    except Exception as e:
-        print(f"Failed to set cache: {e}")
+# -----------------------------
+# Celery app initialization
+# -----------------------------
+app = Celery("p2p_comm")
+app.config_from_object("django.conf:settings", namespace="CELERY")
+app.autodiscover_tasks()
