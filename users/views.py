@@ -164,8 +164,10 @@ class MeProfileView(APIView):
     )
     def patch(self, request, *args, **kwargs):
         serializer = MeProfileSerializer(
-            request.user.profile, data=request.data, partial=True
-        )
+    request.user.profile, data=request.data, partial=True, context={"request": request}
+)
+
+
         if serializer.is_valid():
             profile = serializer.save()
 
@@ -177,6 +179,9 @@ class MeProfileView(APIView):
 
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+
 
 
 class PublicProfileView(RetrieveAPIView):
