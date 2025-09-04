@@ -1,16 +1,25 @@
-# # chatapp/views.py
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from django.db.models import Q
-from django.conf import settings
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from django.db import models
+# Standard Library
+import json
+
+# Third-Party
 from cryptography.fernet import Fernet, InvalidToken
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+# Django
+from django.conf import settings
+from django.core.cache import cache
+from django.db import models
 from django.db.models import Q, F, Case, When, IntegerField
 from django.db.models.functions import Greatest, Least
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+
+# Local Apps
 from users.models import CustomUser as User
 from .models import Message
 from .serializers import (
@@ -18,41 +27,13 @@ from .serializers import (
     MessageDecryptSerializer,
     RecentChatSerializer,
 )
-
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
-from drf_spectacular.types import OpenApiTypes
-
-from django.core.cache import cache
-from .redis_helpers import r, recent_chats_key, unread_key
+from .redis_helpers import r, chat_key, recent_chats_key, unread_key
 from .tasks import (
     invalidate_recent_chats_cache,
     increment_unread_counter,
     send_realtime_notification,
 )
 
-
-
-import json
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from django.db.models import Q
-from django.conf import settings
-from django.shortcuts import get_object_or_404
-from cryptography.fernet import Fernet, InvalidToken
-
-# Models and Serializers
-from users.models import CustomUser as User
-from .models import Message
-from .serializers import MessageSerializer, MessageDecryptSerializer
-
-# Redis and Async Tasks
-from .redis_helpers import r, chat_key, recent_chats_key, unread_key
-from .tasks import send_realtime_notification
-
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
 
 # --------------------------
 # Create + List Messages

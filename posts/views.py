@@ -10,6 +10,8 @@ from .serializers import (
     ReplySerializer,
     UserSearchSerializer,
     PostSearchSerializer,
+    LikeCountPostSerializer,
+    LikeCountCommentSerializer,
 )
 from django.db import models
 from users.models import CustomUser as User
@@ -19,7 +21,6 @@ from django.contrib.postgres.search import SearchVector, TrigramSimilarity
 from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Tag
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
-from .serializers import LikeCountSerializer
 from rest_framework import serializers
 
 
@@ -393,15 +394,24 @@ class ListCreateCommentReplies(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request, slug):
+        try:
+            comment = Comment.objects.get(slug=slug)
+        except Comment.DoesNotExist:
+            return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        comment.delete()
+        return Response({"detail": "Comment deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
 
 
-class LikesCount(APIView):
+class LikesCountPost(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = LikeCountSerializer
+    serializer_class = LikeCountPostSerializer
 
     @extend_schema(
         summary="Get the count of likes for a post",
-        responses={200: LikeCountSerializer, 404: OpenApiResponse(description="Post not found")},
+        responses={200: LikeCountPostSerializer, 404: OpenApiResponse(description="Post not found")},
         tags=["Likes"],
     )
     def get(self, request, slug):
@@ -415,6 +425,24 @@ class LikesCount(APIView):
         return Response({"count": count, "is_like": is_like})
 
 
+class LikeCountComment(APIView):
+    permission_classes = [IsAuthenticated]
+    serializers_class = LikeCountCommentSerializer
+
+    @extend_schema(
+        summary="Get the count of likes for a comment",
+        responses={200: LikeCountCommentSerializer, 404: OpenApiResponse(description="Comment not found")},
+        tags=["Likes"],
+    )
+    def get(self, request, slug):
+        try:
+            comment = Comment.objects.get(slug=slug)
+        except Comment.DoesNotExist:
+            return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        count = comment.likes.count()
+        is_like = comment.likes.filter(id=request.user.id).exists()
+        return Response({"count": count, "is_like": is_like})
     
 # ---- Quick inline serializers for responses ----
 class SimpleDetailSerializer(serializers.Serializer):
@@ -423,6 +451,7 @@ class SimpleDetailSerializer(serializers.Serializer):
 class CountResponseSerializer(serializers.Serializer):
     count = serializers.IntegerField()
     is_like = serializers.BooleanField(required=False)
+
 
 
 # ---- Likes ----
@@ -467,6 +496,33 @@ class UnlikePost(APIView):
 
         post.likes.remove(request.user)
         return Response({"detail": "Post unliked successfully"}, status=status.HTTP_200_OK)
+    
+class UnlikeComment(APIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = SimpleDetailSerializer
+
+    @extend_schema(
+        summary="Unlike a comment",
+        responses={
+            200: SimpleDetailSerializer,
+            400: SimpleDetailSerializer,
+            404: OpenApiResponse(description="Comment not found"),
+        },
+        tags=["Likes"],
+        
+    )
+
+    def put(self, request, slug):
+        try:
+            comment = Comment.objects.get(slug=slug)
+        except Comment.DoesNotExist:
+            return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not comment.likes.filter(id=request.user.id).exists():
+            return Response({"detail": "You have not liked this comment."}, status=status.HTTP_400_BAD_REQUEST)
+
+        comment.likes.remove(request.user)
+        return Response({"detail": "Comment unliked successfully"}, status=status.HTTP_200_OK)
 
 class LikeComment(APIView):
     permission_classes = [IsAuthenticated]
