@@ -4,6 +4,11 @@ from .models import Post, Comment, Tag
 from users.models import CustomUser
 from django.utils.text import slugify
 
+
+class UserMentionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['username', 'full_name']
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
@@ -27,10 +32,11 @@ class PostSerializer(serializers.ModelSerializer):
     )
     author = serializers.CharField(source='author.full_name', read_only=True)
     slug = serializers.CharField(read_only=True)
+    mentions = UserMentionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Post
-        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author', 'published', 'created_at', 'updated_at']
+        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author','mentions', 'published', 'created_at', 'updated_at']
         read_only_fields = ['slug', 'author', 'created_at', 'updated_at']
 
     def validate(self, data):
@@ -62,6 +68,7 @@ class CommentSerializer(serializers.ModelSerializer):
     # author = serializers.CharField(source='author.full_name', read_only=True)
     author = serializers.SerializerMethodField()
     post = serializers.PrimaryKeyRelatedField(queryset=Post.objects.all(), required=True)
+    mentions = UserMentionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Comment

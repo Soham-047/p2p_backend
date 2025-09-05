@@ -1,4 +1,4 @@
-from rest_framework import status
+from rest_framework import status, filters, generics
 from django.contrib.auth.decorators import permission_required
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -20,7 +20,7 @@ from django.db.models.functions import Concat
 from django.contrib.postgres.search import SearchVector, TrigramSimilarity
 from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Tag
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample, OpenApiParameter, OpenApiTypes
 from rest_framework import serializers
 
 
@@ -549,11 +549,29 @@ class SearchView(APIView):
     @extend_schema(
         summary="Unified search for users or posts",
         parameters=[
-            # you can add query params documentation here if you want
+            OpenApiParameter(
+                name="q",
+                type=OpenApiTypes.STR,
+                required=True,
+                description="Search query string"
+            ),
+            OpenApiParameter(
+                name="type",
+                type=OpenApiTypes.STR,
+                required=False,
+                enum=["people", "posts"],
+                description="Type of search: 'people' or 'posts' (default: posts)"
+            ),
         ],
         responses={
-            200: OpenApiResponse(response=UserSearchSerializer(many=True), description="List of users (if type=people)"),
-            201: OpenApiResponse(response=PostSearchSerializer(many=True), description="List of posts (if type=posts)"),
+            200: OpenApiResponse(
+                response=UserSearchSerializer(many=True),
+                description="List of users (if type=people)"
+            ),
+            201: OpenApiResponse(
+                response=PostSearchSerializer(many=True),
+                description="List of posts (if type=posts)"
+            ),
             400: SimpleDetailSerializer,
         },
         tags=["Search"],
@@ -586,3 +604,22 @@ class SearchView(APIView):
             return Response(serializer.data)
 
         return Response({"detail": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."}, status=400)
+    
+
+
+class UserSearchAPIView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSearchSerializer
+    queryset = User.objects.all()
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['username', 'full_name']
+
+    @extend_schema(
+        summary="Search all users",
+        description="Return a list of all users matched with the search query.",
+        responses={200: UserSearchSerializer(many=True)},
+        tags=["Search"],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+   

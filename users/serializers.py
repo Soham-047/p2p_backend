@@ -115,9 +115,10 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         request = self.context.get("request")
-        if obj and obj.has_avatar():
+        if request and obj and obj.has_avatar():
             return request.build_absolute_uri(f"/api/profile/{obj.user.username}/avatar/")
         return None
+
 
     def validate(self, data):
         avatar_file = data.get("avatar")
