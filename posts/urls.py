@@ -15,6 +15,7 @@ from .views import (
     LikeComment,
     SearchView,
     LikeCountComment,
+    UserSearchAPIView,
 )
 
 urlpatterns = [
@@ -60,6 +61,9 @@ urlpatterns = [
     path("comments/<slug:slug>/like-count/", LikeCountComment.as_view(), name="comment-like-count"),
 
     #urls for search on Posts and Users
-    path("search/", SearchView.as_view(), name="search"),
+    path("global-search/", SearchView.as_view(), name="search"),
+
+    #urls to search only user
+    path('users/search/', UserSearchAPIView.as_view(), name='user-search'),
 ]
 

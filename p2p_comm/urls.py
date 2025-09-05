@@ -23,9 +23,9 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/", include("users.urls")),
-    path("api/", include("posts.urls")),
-    path("api/", include("p2p_messages.urls")),
+    path("api/users-app/", include("users.urls")),
+    path("api/posts-app/", include("posts.urls")),
+    path("api/messages-app/", include("p2p_messages.urls")),
     # OpenAPI schema + UIs:
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
