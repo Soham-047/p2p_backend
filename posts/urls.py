@@ -16,6 +16,7 @@ from .views import (
     SearchView,
     LikeCountComment,
     UserSearchAPIView,
+    TagSearchAPIView,
 )
 
 urlpatterns = [
@@ -65,5 +66,8 @@ urlpatterns = [
 
     #urls to search only user
     path('users/search/', UserSearchAPIView.as_view(), name='user-search'),
+
+    #url to search Tag
+    path('tags/search/', TagSearchAPIView.as_view(), name='tag-search'),
 ]
 

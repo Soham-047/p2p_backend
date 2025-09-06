@@ -131,3 +131,9 @@ class LikeCountPostSerializer(serializers.Serializer):
 class LikeCountCommentSerializer(serializers.Serializer):
     count = serializers.IntegerField()
     is_like = serializers.BooleanField()
+
+
+# class TagSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Tag
+#         fields = ['name']

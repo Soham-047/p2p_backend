@@ -66,7 +66,7 @@ from .tasks import (
 #         messages = Message.objects.filter(Q(sender=user) | Q(receiver=user)).order_by('-timestamp')
 #         serializer = MessageSerializer(messages, many=True)
 #         return Response(serializer.data)
-
+from drf_spectacular.utils import *
 
 class MessageListCreateAPIView(APIView):
     """
@@ -75,6 +75,17 @@ class MessageListCreateAPIView(APIView):
     specific and performant ChatHistoryView and RecentChatsAPIView.
     """
     permission_classes = [IsAuthenticated]
+    @extend_schema(
+        summary="Create a new message",
+        description="Create a new message between two users.",
+        request=MessageSerializer,
+        responses={
+            201: MessageSerializer,
+            400: OpenApiResponse(description="Validation error"),
+        },
+        tags=["Messages"],
+    )
+
 
     def post(self, request):
         serializer = MessageSerializer(data=request.data)
