@@ -20,7 +20,7 @@ from django.db.models.functions import Concat
 from django.contrib.postgres.search import SearchVector, TrigramSimilarity
 from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Tag
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample, OpenApiParameter, OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample, OpenApiParameter, OpenApiTypes,extend_schema_view
 from rest_framework import serializers
 
 
@@ -623,3 +623,40 @@ class UserSearchAPIView(generics.ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
    
+
+
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="Search for tags",
+        description="Search and return tags by query string.",
+        parameters=[
+            OpenApiParameter(
+                name="q",
+                location=OpenApiParameter.QUERY,
+                required=True,
+                type=OpenApiTypes.STR,
+                description="Search query string",
+            )
+        ],
+        responses={
+            200: OpenApiResponse(response=TagSerializer(many=True)),
+            400: OpenApiResponse(response=SimpleDetailSerializer),
+        },
+        tags=["Search"],
+    )
+)
+class TagSearchAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    serializers_class = TagSerializer
+
+    def get(self, request, *args, **kwargs):
+        tag_name = request.query_params.get("q")
+        if not tag_name:
+            return Response(
+                {"detail": "A search query parameter 'q' is required."},
+                status=400,
+            )
+        post = Post.objects.filter(tags__name__icontains=tag_name)
+        serializer = PostSerializer(post, many=True)
+        return Response(serializer.data)
