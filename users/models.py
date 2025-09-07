@@ -28,8 +28,10 @@ class Profile(models.Model):
     headline = models.CharField(max_length=140, blank=True)
     about = models.TextField(blank=True)
     location = models.CharField(max_length=120, blank=True)
-    dob = models.DateField(blank=True, null=True)  # ✅ DOB
-    achievements = models.TextField(blank=True)   # ✅ Achievements (comma-separated or rich text)
+    achievements = models.TextField(null=True, blank=True)
+    dob = models.DateField(null=True, blank=True)
+    certificate = models.CharField(max_length=255, null=True, blank=True)
+    project = models.CharField(max_length=255, null=True, blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 

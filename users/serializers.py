@@ -75,6 +75,11 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     skills = SkillSerializer(many=True, read_only=True)
     education = EducationSerializer(many=True, read_only=True)
     links = LinkSerializer(many=True, read_only=True)
+    dob = serializers.DateField(read_only=True)
+    achievements = serializers.CharField(read_only=True)
+    headline = serializers.CharField(read_only=True)
+    about = serializers.CharField(read_only=True)
+    location = serializers.CharField(read_only=True)
 
     social_links = SocialLinkSerializer(many=True, read_only=True)
     projects = ProjectSerializer(many=True, read_only=True)
