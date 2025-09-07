@@ -1,7 +1,7 @@
+import re
 from django.db import models
 from users.models import CustomUser
 from django.utils.text import slugify
-
 class Tag(models.Model):
     name = models.CharField(max_length=50, unique=True)
     slug = models.SlugField(unique=True)
@@ -30,6 +30,7 @@ class Post(models.Model):
     published = models.BooleanField(default=True)
     tags = models.ManyToManyField(Tag, blank=True)
     likes = models.ManyToManyField(CustomUser, related_name='liked_posts', blank=True)
+    mentions = models.ManyToManyField(CustomUser, related_name='mentioned_posts', blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -48,6 +49,13 @@ class Post(models.Model):
             self.slug = unique_slug
         super().save(*args, **kwargs)
 
+        mentioned_usersnames = re.findall(r'@(\w+)', self.content)
+        if mentioned_usersnames:
+            mentioned_user = CustomUser.objects.filter(username__in=mentioned_usersnames)
+            self.mentions.set(mentioned_user)
+        else:
+            self.mentions.clear()
+
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -58,6 +66,7 @@ class Comment(models.Model):
     is_active = models.BooleanField(default=True)
     likes = models.ManyToManyField(CustomUser, related_name='liked_comments', blank=True)
     slug = models.SlugField(blank=True,unique=True)
+    mentions = models.ManyToManyField(CustomUser, related_name='mentioned_comments', blank=True)
     
     def __str__(self):
         return f"Comment by {self.author} on {self.post}"
@@ -74,3 +83,10 @@ class Comment(models.Model):
                 counter += 1
             self.slug = unique_slug
         super().save(*args, **kwargs)
+
+        mentioned_usersnames = re.findall(r'@(\w+)', self.content)
+        if mentioned_usersnames:
+            mentioned_user = CustomUser.objects.filter(username__in=mentioned_usersnames)
+            self.mentions.set(mentioned_user)
+        else:
+            self.mentions.clear()

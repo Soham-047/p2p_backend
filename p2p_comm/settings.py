@@ -196,13 +196,16 @@ REST_FRAMEWORK = {
         "user": "60/min",  # tweak as needed
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    
 }
 REST_FRAMEWORK.update({
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 })
 SIMPLE_JWT = {
+
     "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
+
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     # add more config here if needed (algorithms, signing key, etc.)
@@ -294,3 +297,11 @@ SIMPLE_JWT = {
 app = Celery("p2p_comm")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
+
+
+# settings.py
+
+# Cache TTL values (in seconds)
+CACHE_TTL_SHORT = 60       # 1 minute
+CACHE_TTL_MED = 300        # 5 minutes
+CACHE_TTL_LONG = 3600      # 1 hour

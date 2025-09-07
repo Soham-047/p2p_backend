@@ -92,7 +92,10 @@ class PublicProfileSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         request = self.context.get("request")
-        if obj and obj.has_avatar() and request:
+        if not request:
+            return None
+        
+        if obj and hasattr(obj, "has_avatar") and obj.has_avatar() and request:
             return request.build_absolute_uri(
                 f"/api/profile/{obj.user.username}/avatar/"
             )
@@ -139,9 +142,10 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         request = self.context.get("request")
-        if obj and obj.has_avatar():
+        if request and obj and obj.has_avatar():
             return request.build_absolute_uri(f"/api/profile/{obj.user.username}/avatar/")
         return None
+
 
     def validate(self, data):
         avatar_file = data.get("avatar")

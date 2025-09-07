@@ -8,12 +8,15 @@ from .views import (
     ListTags,
     DeleteCommentView,
     CommentCountView,
-    LikesCount,
+    LikesCountPost,
     LikePost,
     UnlikePost,
     ListCreateCommentReplies,
     LikeComment,
     SearchView,
+    LikeCountComment,
+    UserSearchAPIView,
+    TagSearchAPIView,
 )
 
 urlpatterns = [
@@ -41,7 +44,7 @@ urlpatterns = [
     path('delete-tag/<slug:slug>/', ListTags.as_view(), name='delete-tag'),
 
     #Count Likes for a post
-    path('<slug:slug>/like-count/', LikesCount.as_view(), name='post-like-count'),
+    path('<slug:slug>/like-count/', LikesCountPost.as_view(), name='post-like-count'),
     
     #Like a Post
     path('<slug:slug>/like-post/', LikePost.as_view(), name='like-post'),
@@ -55,7 +58,16 @@ urlpatterns = [
     #Like a comment
     path("comments/<slug:slug>/like/", LikeComment.as_view(), name="like-comment"),
 
+    # return count of likes in a comment and whether the user has liked the comment
+    path("comments/<slug:slug>/like-count/", LikeCountComment.as_view(), name="comment-like-count"),
+
     #urls for search on Posts and Users
-    path("search/", SearchView.as_view(), name="search"),
+    path("global-search/", SearchView.as_view(), name="search"),
+
+    #urls to search only user
+    path('users/search/', UserSearchAPIView.as_view(), name='user-search'),
+
+    #url to search Tag
+    path('tags/search/', TagSearchAPIView.as_view(), name='tag-search'),
 ]
 

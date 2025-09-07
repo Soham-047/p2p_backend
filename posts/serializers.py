@@ -4,6 +4,11 @@ from .models import Post, Comment, Tag
 from users.models import CustomUser
 from django.utils.text import slugify
 
+
+class UserMentionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ['username', 'full_name']
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
@@ -27,10 +32,11 @@ class PostSerializer(serializers.ModelSerializer):
     )
     author = serializers.CharField(source='author.full_name', read_only=True)
     slug = serializers.CharField(read_only=True)
+    mentions = UserMentionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Post
-        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author', 'published', 'created_at', 'updated_at']
+        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author','mentions', 'published', 'created_at', 'updated_at']
         read_only_fields = ['slug', 'author', 'created_at', 'updated_at']
 
     def validate(self, data):
@@ -59,22 +65,29 @@ class PostSerializer(serializers.ModelSerializer):
         return instance
 
 class CommentSerializer(serializers.ModelSerializer):
-    author = serializers.CharField(source='author.full_name', read_only=True)
+    # author = serializers.CharField(source='author.full_name', read_only=True)
+    author = serializers.SerializerMethodField()
     post = serializers.PrimaryKeyRelatedField(queryset=Post.objects.all(), required=True)
+    mentions = UserMentionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Comment
         fields = "__all__"
         read_only_fields = ["slug", "author", "created_at", "updated_at"]
 
+    def get_author(self, obj):
+        if obj.author and hasattr(obj.author, 'full_name'):
+            return obj.author.full_name
+        return None
 
 
 class ReplySerializer(serializers.ModelSerializer):
     author = serializers.CharField(source="author.full_name", read_only=True)
+    parent_author = serializers.CharField(source="parent.author.full_name", read_only=True)
 
     class Meta:
         model = Comment
-        fields = ["slug", "content", "author", "parent", "post", "created_at", "updated_at"]
+        fields = ["slug", "content", "author", "parent_author", "post", "created_at", "updated_at"]
         read_only_fields = ["slug", "author", "parent", "post", "created_at", "updated_at"]
 
     def create(self, validated_data):
@@ -85,6 +98,7 @@ class ReplySerializer(serializers.ModelSerializer):
             author=self.context["request"].user,
             content=validated_data["content"],
         )
+        print(parent_comment.author.full_name)
         return reply
 
 # search/serializers.py
@@ -110,6 +124,16 @@ class PostSearchSerializer(serializers.ModelSerializer):
         model = Post
         fields = ['title', 'slug', 'author', 'created_at']
 
-class LikeCountSerializer(serializers.Serializer):
+class LikeCountPostSerializer(serializers.Serializer):
     count = serializers.IntegerField()
     is_like = serializers.BooleanField()
+
+class LikeCountCommentSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    is_like = serializers.BooleanField()
+
+
+# class TagSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Tag
+#         fields = ['name']
