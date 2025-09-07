@@ -14,7 +14,8 @@ from rest_framework.views import APIView
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models
-from django.db.models import Q, F, Case, When, IntegerField
+from django.db.models import Q, F as DjF, Case, When, IntegerField
+
 from django.db.models.functions import Greatest, Least
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
@@ -384,7 +385,7 @@ class ChatHistoryView(APIView):
 
 
 # Make sure all these imports are at the top of your views.py
-
+import base64
 class RecentChatsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -423,13 +424,16 @@ class RecentChatsAPIView(APIView):
                     chat_id = last_msg.get('id', other_id)
                     last_message_time = last_msg.get('timestamp')
                     try:
-                        decrypted_text = fernet.decrypt(last_msg['ciphertext'].encode('latin1')).decode('utf-8')
-                        if last_msg.get('sender_id') == user_id:
-                            last_message_preview = f"You: {decrypted_text}"
-                        else:
-                            last_message_preview = decrypted_text
+                            ciphertext_b64 = last_msg['ciphertext']
+                            ciphertext_bytes = base64.b64decode(ciphertext_b64)  # 🔑 Decode it back
+                            decrypted_text = fernet.decrypt(ciphertext_bytes).decode('utf-8')
+
+                            if last_msg.get('sender_id') == user_id:
+                                last_message_preview = f"You: {decrypted_text}"
+                            else:
+                                last_message_preview = decrypted_text
                     except InvalidToken:
-                        last_message_preview = "[Decryption Failed]"
+                            last_message_preview = "[Decryption Failed]"
                 
                 response_data.append({
                     "id": chat_id, "other_user": {"id": user_obj.id, "username": user_obj.username, "full_name": user_obj.full_name},
@@ -445,11 +449,12 @@ class RecentChatsAPIView(APIView):
             Q(sender_id=user_id) | Q(receiver_id=user_id)
         ).annotate(
             chat_partner_id=Case(
-                When(sender_id=user_id, then=F('receiver_id')),
-                default=F('sender_id'),
+                When(sender_id=user_id, then=DjF('receiver_id')),
+                default=DjF('sender_id'),
                 output_field=IntegerField()
             )
         ).order_by('chat_partner_id', '-timestamp').distinct('chat_partner_id')
+
 
         if not latest_messages:
             return Response([])
