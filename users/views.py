@@ -24,8 +24,8 @@ from django.db.models import Q
 from users.tasks import send_registration_email, log_user_activity
 import base64
 from PIL import Image
-from .models import Experience, Skill, Education, Links
-from .serializers import ExperienceSerializer, SkillSerializer, EducationSerializer, LinkSerializer
+from .models import Experience, Skill, Education, Links, SocialLink, Project, Certificate
+from .serializers import ExperienceSerializer, SkillSerializer, EducationSerializer, LinkSerializer, SocialLinkSerializer, ProjectSerializer, CertificateSerializer
 User = get_user_model()
 
 class RegistrationAPIView(APIView):
@@ -396,6 +396,11 @@ class MeAvatarThumbnailView(APIView):
         response['Content-Disposition'] = f'inline; filename="avatar_thumbnail.jpg"'
         return response
     
+@extend_schema(
+    tags=["Profile"],
+    summary="Manage work experiences",
+    description="CRUD operations for the authenticated user's work experiences."
+)
 class ExperienceViewSet(viewsets.ModelViewSet):
     serializer_class = ExperienceSerializer
     permission_classes = [IsAuthenticated]
@@ -407,6 +412,11 @@ class ExperienceViewSet(viewsets.ModelViewSet):
         serializer.save(profile=self.request.user.profile)
 
 
+@extend_schema(
+    tags=["Profile"],
+    summary="Manage skills",
+    description="CRUD operations for the authenticated user's skills."
+)
 class SkillViewSet(viewsets.ModelViewSet):
     serializer_class = SkillSerializer
     permission_classes = [IsAuthenticated]
@@ -418,6 +428,11 @@ class SkillViewSet(viewsets.ModelViewSet):
         serializer.save(profile=self.request.user.profile)
 
 
+@extend_schema(
+    tags=["Profile"],
+    summary="Manage education records",
+    description="CRUD operations for the authenticated user's education."
+)
 class EducationViewSet(viewsets.ModelViewSet):
     serializer_class = EducationSerializer
     permission_classes = [IsAuthenticated]
@@ -429,3 +444,49 @@ class EducationViewSet(viewsets.ModelViewSet):
         serializer.save(profile=self.request.user.profile)
 
 
+@extend_schema(
+    tags=["Profile"],
+    summary="Manage projects",
+    description="CRUD operations for the authenticated user's projects."
+)
+class ProjectViewSet(viewsets.ModelViewSet):
+    serializer_class = ProjectSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Project.objects.filter(profile=self.request.user.profile)
+
+    def perform_create(self, serializer):
+        serializer.save(profile=self.request.user.profile)
+
+
+@extend_schema(
+    tags=["Profile"],
+    summary="Manage certificates",
+    description="CRUD operations for the authenticated user's certificates."
+)
+class CertificateViewSet(viewsets.ModelViewSet):
+    serializer_class = CertificateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Certificate.objects.filter(profile=self.request.user.profile)
+
+    def perform_create(self, serializer):
+        serializer.save(profile=self.request.user.profile)
+
+
+@extend_schema(
+    tags=["Profile"],
+    summary="Manage social links",
+    description="CRUD operations for the authenticated user's social links (e.g., LinkedIn, GitHub, Twitter)."
+)
+class SocialLinkViewSet(viewsets.ModelViewSet):
+    serializer_class = SocialLinkSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return SocialLink.objects.filter(profile=self.request.user.profile)
+
+    def perform_create(self, serializer):
+        serializer.save(profile=self.request.user.profile)

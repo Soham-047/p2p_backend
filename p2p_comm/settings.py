@@ -201,8 +201,8 @@ REST_FRAMEWORK.update({
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 })
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     # add more config here if needed (algorithms, signing key, etc.)
@@ -255,6 +255,13 @@ CHANNEL_LAYERS = {
 # Celery
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
+if REDIS_URL.startswith("rediss://"):
+    ssl_opts = {"ssl_cert_reqs": ssl.CERT_NONE}  # Upstash free tier usually needs CERT_NONE
+    CELERY_BROKER_USE_SSL = ssl_opts
+    CELERY_RESULT_BACKEND_USE_SSL = ssl_opts
+else:
+    CELERY_BROKER_USE_SSL = None
+    CELERY_RESULT_BACKEND_USE_SSL = None
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -264,7 +271,7 @@ CELERY_TIMEZONE = "Asia/Kolkata"
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL + "/1",
+        "LOCATION": REDIS_URL + "/0",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },

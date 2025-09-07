@@ -14,6 +14,9 @@ from .views import (
     ExperienceViewSet,
     SkillViewSet,
     EducationViewSet,
+    SocialLinkViewSet,
+    ProjectViewSet,
+    CertificateViewSet,
 )
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
@@ -24,6 +27,11 @@ router.register(r"users", UserViewSet, basename="user")
 router.register(r"profile/me/experiences", ExperienceViewSet, basename="experience")
 router.register(r"profile/me/skills", SkillViewSet, basename="skill")
 router.register(r"profile/me/education", EducationViewSet, basename="education")
+# Add new section endpoints
+router.register(r"profile/me/social-links", SocialLinkViewSet, basename="sociallink")
+router.register(r"profile/me/projects", ProjectViewSet, basename="project")
+router.register(r"profile/me/certificates", CertificateViewSet, basename="certificate")
+
 
 urlpatterns = [
     path("", include(router.urls)),

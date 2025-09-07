@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Profile, Experience, Skill, Education, Links
+from .models import Profile, Experience, Skill, Education, Links, SocialLink, Project, Certificate
 import base64
 
 User = get_user_model()
@@ -48,6 +48,24 @@ class LinkSerializer(serializers.ModelSerializer):
         model = Links
         fields = ["id", "label", "url"]
 
+class SocialLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SocialLink
+        fields = ["id", "platform", "url"]
+
+
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = ["id", "title", "description", "link"]
+
+
+class CertificateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Certificate
+        fields = ["id", "name", "issuer", "issue_date", "credential_id", "credential_url"]
+
+
 class PublicProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     full_name = serializers.CharField(source="user.full_name", read_only=True)
@@ -58,13 +76,18 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     education = EducationSerializer(many=True, read_only=True)
     links = LinkSerializer(many=True, read_only=True)
 
+    social_links = SocialLinkSerializer(many=True, read_only=True)
+    projects = ProjectSerializer(many=True, read_only=True)
+    certificates = CertificateSerializer(many=True, read_only=True)
+
     class Meta:
         model = Profile
         fields = [
-            "username", "full_name",
-            "headline", "about", "location",
-            "experiences", "skills", "education", "links",
-            "avatar_url",
+            "username", "full_name", "headline", "about", "location",
+            "dob", "achievements",
+            "experiences", "skills", "education",
+            "social_links", "projects", "certificates",
+            "avatar_url", "links",
         ]
 
     def get_avatar_url(self, obj):
@@ -89,6 +112,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     secondary_email = serializers.EmailField(source="user.secondary_email", required=False, allow_null=True, allow_blank=True)
     batch = serializers.CharField(source="user.batch", required=False, allow_blank=True, allow_null=True)
     is_current_student = serializers.BooleanField(source="user.is_current_student", required=False)
+    dob = serializers.DateField(required=False, allow_null=True)
+    achievements = serializers.CharField(required=False, allow_blank=True)
 
     avatar = serializers.ImageField(write_only=True, required=False, allow_null=True)
     avatar_base64 = serializers.CharField(write_only=True, required=False, allow_null=True)
@@ -98,15 +123,17 @@ class ProfileSerializer(serializers.ModelSerializer):
     educations = EducationSerializer(many=True, read_only=True)
     skills = SkillSerializer(many=True, read_only=True)
     links = LinkSerializer(many=True, read_only=True)
+    social_links = SocialLinkSerializer(many=True, read_only=True)  # ✅
+    projects = ProjectSerializer(many=True, read_only=True)         # ✅
+    certificates = CertificateSerializer(many=True, read_only=True) # ✅
 
     class Meta:
         model = Profile
         fields = [
             "username", "full_name", "email", "secondary_email",
-            "batch", "is_current_student",
-            "headline", "about", "location",
-            "experiences", "educations", "skills", "links",   # keep links JSON
-            "avatar", "avatar_base64", "avatar_url", "updated_at",
+            "batch", "is_current_student", "dob", "location", "headline", "about",
+            "achievements", "experiences", "educations", "skills", "links", "social_links",
+            "projects", "certificates", "avatar", "avatar_base64", "avatar_url", "updated_at"
         ]
         read_only_fields = ["updated_at"]
 

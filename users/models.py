@@ -24,17 +24,16 @@ def avatar_upload_path(instance, filename):
 
 class Profile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
-    # LinkedIn-like fields
+
     headline = models.CharField(max_length=140, blank=True)
     about = models.TextField(blank=True)
     location = models.CharField(max_length=120, blank=True)
-    # Store experiences/links as JSON (works on SQLite and Postgres)
-    # experiences = models.JSONField(default=list, blank=True)  # e.g., [{"title": "...", "company": "..."}]
-    # links = models.JSONField(default=list, blank=True)        # e.g., [{"label":"GitHub","url":"..."}]
+    dob = models.DateField(blank=True, null=True)  # ✅ DOB
+    achievements = models.TextField(blank=True)   # ✅ Achievements (comma-separated or rich text)
 
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # Blob fields for storing avatar in DB
+
+    # Avatar fields...
     avatar_blob = models.BinaryField(blank=True, null=True, editable=True)
     avatar_content_type = models.CharField(max_length=120, blank=True, null=True)
     avatar_filename = models.CharField(max_length=255, blank=True, null=True)
@@ -42,8 +41,36 @@ class Profile(models.Model):
 
     def has_avatar(self):
         return bool(self.avatar_blob)
+
     def __str__(self):
         return f"Profile<{self.user.username}>"
+
+
+# ✅ Links (reuse Links but expand for social/projects/certs)
+class SocialLink(models.Model):
+    profile = models.ForeignKey("Profile", related_name="social_links", on_delete=models.CASCADE)
+    platform = models.CharField(max_length=120)  # "LinkedIn", "GitHub", "Twitter"
+    url = models.URLField()
+
+
+class Project(models.Model):
+    profile = models.ForeignKey("Profile", related_name="projects", on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    link = models.URLField(blank=True)
+
+
+class Certificate(models.Model):
+    profile = models.ForeignKey("Profile", related_name="certificates", on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    issuer = models.CharField(max_length=255, blank=True)
+    issue_date = models.DateField(blank=True, null=True)
+    credential_id = models.CharField(max_length=255, blank=True, null=True)
+    credential_url = models.URLField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.profile.user.username})"
+
 
 class Links(models.Model):
     profile = models.ForeignKey("Profile", related_name="links", on_delete=models.CASCADE)
