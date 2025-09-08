@@ -15,6 +15,9 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . /app/
 
+# Collect static files during build
+RUN python manage.py collectstatic --noinput || true
+
 # Copy and make entrypoint executable
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
@@ -30,7 +33,7 @@ ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 
-# Replace the existing CMD line with this:
+# Run Daphne for ASGI
 CMD ["sh", "-c", "daphne -b 0.0.0.0 -p $PORT p2p_comm.asgi:application"]
 
 
