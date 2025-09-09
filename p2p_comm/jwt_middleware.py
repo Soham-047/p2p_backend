@@ -3,6 +3,17 @@ from django.conf import settings
 from channels.middleware import BaseMiddleware
 from channels.db import database_sync_to_async
 from urllib.parse import parse_qs
+
+import os
+from celery import Celery
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "p2p_comm.settings")
+
+app = Celery("p2p_comm")
+app.config_from_object("django.conf:settings", namespace="CELERY")
+app.autodiscover_tasks()
+
+
 from users.models import CustomUser as User
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import get_user_model

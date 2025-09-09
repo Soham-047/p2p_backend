@@ -1,11 +1,11 @@
-# p2p_comm/settings.py
 import ssl, certifi
 import dj_database_url
 from pathlib import Path
 from datetime import timedelta
-from decouple import config, Csv
-from celery import Celery
-import os, urllib.parse
+from decouple import config
+import os
+
+
 def get_env(key, default=None, cast=str, required=False):
     """
     Get environment variable via python-decouple.
@@ -18,19 +18,21 @@ def get_env(key, default=None, cast=str, required=False):
     except Exception as e:
         raise ValueError(f"Failed to fetch environment variable '{key}': {e}")
 
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY - change this in production
+# SECURITY
 SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DEBUG", default="False")
-print(get_env("DEBUG"))
-# Development hosts
 ALLOWED_HOSTS = get_env("ALLOWED_HOSTS").split(",")
 
-# Application definition
+# -----------------------
+# Installed Apps
+# -----------------------
 INSTALLED_APPS = [
     'daphne',
-    # django core
+
+    # Django core
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -38,83 +40,40 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # third-party
+    # Third-party
     "rest_framework",
     "rest_framework_simplejwt",
-
-    # email
     "anymail",
-
     "drf_spectacular",
     "corsheaders",
-
     "django_celery_results",
-    # "django_celery_beat",  
+    # "django_celery_beat",
 
-    # your apps
-    'p2p_messages', # make sure this app exists
+    # Project apps
+    'p2p_messages',
     "users",
     'posts',
-    "channels", 
+    "channels",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    # Corsheaders middleware
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    # CSRF middleware stays for admin/session pages; JWT API views don't use it
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-FERNET_KEY = get_env('FERNET_KEY', required=True).encode('utf-8')
-CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOW_CREDENTIALS = True
-
-CORS_ALLOWED_ORIGINS = get_env(
-    "CORS_ALLOWED_ORIGINS", 
-    default="http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000,https://p2p-backend-e8bk.onrender.com",
-).split(",")
-
-
-CSRF_TRUSTED_ORIGINS = get_env(
-    "CSRF_TRUSTED_ORIGINS", 
-    default="https://p2p-backend-e8bk.onrender.com,https://*.onrender.com,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000",
-).split(",")
-
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
-
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
-
 ROOT_URLCONF = "p2p_comm.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],  # frontend handles UI; templates not required for API
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -129,22 +88,22 @@ TEMPLATES = [
 ASGI_APPLICATION = "p2p_comm.asgi.application"
 WSGI_APPLICATION = "p2p_comm.wsgi.application"
 
-
-# This one block of code handles everything for you.
+# -----------------------
+# Database
+# -----------------------
 DATABASES = {
     'default': dj_database_url.config(
-        # Read the DATABASE_URL from your .env file
         default=config('DATABASE_URL'),
-        # Set a persistent connection and require SSL (critical for Neon)
         conn_max_age=600,
         ssl_require=True
     )
 }
 
-# Custom user model
 AUTH_USER_MODEL = "users.CustomUser"
 
-# Password validation (default validators)
+# -----------------------
+# Password validation
+# -----------------------
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -152,20 +111,23 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# -----------------------
 # Internationalization
+# -----------------------
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "Asia/Kolkata"   # your local timezone
+TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True
 USE_TZ = True
 
-# Static files
+# -----------------------
+# Static & Media
+# -----------------------
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # -----------------------
 # REST Framework + JWT
@@ -183,21 +145,27 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
-
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    # default permission: authenticated for API views unless overridden per-view
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
-    "DEFAULT_THROTTLE_RATES": {
-        "user": "60/min",  # tweak as needed
-    },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "60/min",
+    },
 }
+
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+}
+
 REST_FRAMEWORK.update({
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 })
@@ -211,39 +179,24 @@ REST_FRAMEWORK.update({
 
 
 # -----------------------
-# Email (development)
+# Email
 # -----------------------
-# Console backend prints emails to the runserver output for dev/testing.
-
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.sendgrid.net"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "apikey"  # this literal string
+EMAIL_HOST_USER = "apikey"
 EMAIL_HOST_PASSWORD = get_env("EMAIL_API_KEY", required=True)
 DEFAULT_FROM_EMAIL = get_env("EMAIL_ID", required=True)
 
 # -----------------------
-# CORS / CSRF notes (dev)
+# Redis / Celery / Cache
 # -----------------------
-# We keep CSRF middleware active for admin and any session-based endpoints.
-# API clients will use JWT in Authorization header (no CSRF token required).
-# If you run frontend on a different origin during development, you may need:
-#   pip install django-cors-headers
-# and add corsheaders to INSTALLED_APPS + middleware and set CORS_ALLOWED_ORIGINS.
-# (Don't add here unless you need it.)
-
-
-# -----------------------
-# Redis / Channel Layers / Celery / Cache
-# -----------------------
-
 REDIS_URL = get_env(
     "REDIS_URL",
-    default="redis://localhost:6379/0"  # local fallback
+    default="redis://localhost:6379/0"
 )
 
-# Channels
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -253,26 +206,33 @@ CHANNEL_LAYERS = {
     },
 }
 
-# Celery
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
-if REDIS_URL.startswith("rediss://"):
-    ssl_opts = {"ssl_cert_reqs": ssl.CERT_NONE}  # Upstash free tier usually needs CERT_NONE
+
+from urllib.parse import urlparse
+
+parsed_url = urlparse(REDIS_URL)
+ssl_opts = None
+if parsed_url.scheme == "rediss":
+    ssl_opts = {"ssl_cert_reqs": ssl.CERT_NONE}  # CERT_NONE avoids verification errors
     CELERY_BROKER_USE_SSL = ssl_opts
     CELERY_RESULT_BACKEND_USE_SSL = ssl_opts
 else:
     CELERY_BROKER_USE_SSL = None
     CELERY_RESULT_BACKEND_USE_SSL = None
+
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
 
+
 # # Caching
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL + "/0",
+        "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
@@ -298,6 +258,9 @@ CACHES = {
 
 
 
+
+# Cache TTLs
+
 # -----------------------------
 # JWT / DRF
 # -----------------------------
@@ -319,9 +282,27 @@ app.autodiscover_tasks()
 # settings.py
 
 # Cache TTL values (in seconds)
+
 CACHE_TTL_SHORT = 60       # 1 minute
 CACHE_TTL_MED = 300        # 5 minutes
 CACHE_TTL_LONG = 3600      # 1 hour
+
+
+from celery import Celery
+
+
+app = Celery("p2p_comm")
+app.conf.update(timezone = 'Asia/Kolkata')
+app.conf.update(
+    broker_url=REDIS_URL,
+    result_backend=REDIS_URL,
+    redis_backend_use_ssl={
+        "ssl_cert_reqs": ssl.CERT_NONE  # or CERT_REQUIRED / CERT_OPTIONAL
+    },
+    broker_use_ssl={
+        "ssl_cert_reqs": ssl.CERT_NONE
+    },
+)
 
 
 
@@ -342,3 +323,4 @@ LOGGING = {
         "level": "INFO",  # <--- Set the level to INFO
     },
 }
+
