@@ -1,8 +1,9 @@
-
 services:
   web:
     build: .
-    command: daphne -b 0.0.0.0 -p 8000 p2p_comm.asgi:application
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+             daphne -b 0.0.0.0 -p 8000 p2p_comm.asgi:application"
     volumes:
       - .:/app
     ports:
@@ -13,20 +14,12 @@ services:
       - .env
     environment:
       - DATABASE_HOST=db
-      - REDIS_HOST=redis
     networks:
       - p2p-network
-    
-  redis:
-      image: redis:7
-      ports:
-        - "6379:6379"
-      networks:
-        - p2p-network
 
   celery:
     build: .
-    command: /app/entrypoint.sh celery -A p2p_comm worker -l info
+    command: celery -A p2p_comm worker -l info
     volumes:
       - .:/app
     depends_on:
@@ -35,7 +28,6 @@ services:
       - .env
     environment:
       - DATABASE_HOST=db
-      - REDIS_HOST=redis
     networks:
       - p2p-network
 

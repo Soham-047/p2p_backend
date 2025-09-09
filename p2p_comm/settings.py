@@ -4,7 +4,6 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config
 import os
-from celery import Celery
 
 def get_env(key, default=None, cast=str, required=False):
     """
@@ -21,7 +20,9 @@ def get_env(key, default=None, cast=str, required=False):
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY
+# -----------------------
+# Security
+# -----------------------
 SECRET_KEY = get_env("SECRET_KEY", required=True)
 DEBUG = get_env("DEBUG", default="False")
 ALLOWED_HOSTS = get_env("ALLOWED_HOSTS").split(",")
@@ -68,43 +69,26 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# -----------------------
+# Keys & CORS
+# -----------------------
 FERNET_KEY = get_env('FERNET_KEY', required=True).encode('utf-8')
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = get_env(
-    "CORS_ALLOWED_ORIGINS", 
+    "CORS_ALLOWED_ORIGINS",
     default="http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000,https://p2p-backend-e8bk.onrender.com",
 ).split(",")
 
-
 CSRF_TRUSTED_ORIGINS = get_env(
-    "CSRF_TRUSTED_ORIGINS", 
+    "CSRF_TRUSTED_ORIGINS",
     default="https://p2p-backend-e8bk.onrender.com,https://*.onrender.com,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000",
 ).split(",")
 
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
-
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-
-
+# -----------------------
+# Django Core
+# -----------------------
 ROOT_URLCONF = "p2p_comm.urls"
 
 TEMPLATES = [
@@ -139,7 +123,7 @@ DATABASES = {
 AUTH_USER_MODEL = "users.CustomUser"
 
 # -----------------------
-# Password validation
+# Password Validation
 # -----------------------
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -167,7 +151,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # -----------------------
-# REST Framework + JWT
+# DRF + JWT
 # -----------------------
 SPECTACULAR_SETTINGS = {
     "TITLE": "P2PComm API",
@@ -195,25 +179,12 @@ REST_FRAMEWORK = {
     },
 }
 
-
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
 }
-
-REST_FRAMEWORK.update({
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-})
-# SIMPLE_JWT = {
-#     "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
-#     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-#     "ROTATE_REFRESH_TOKENS": False,
-#     "BLACKLIST_AFTER_ROTATION": False,
-#     # add more config here if needed (algorithms, signing key, etc.)
-# }
-
 
 # -----------------------
 # Email
@@ -229,10 +200,7 @@ DEFAULT_FROM_EMAIL = get_env("EMAIL_ID", required=True)
 # -----------------------
 # Redis / Celery / Cache
 # -----------------------
-REDIS_URL = get_env(
-    "REDIS_URL",
-    default="redis://localhost:6379/0"
-)
+REDIS_URL = get_env("REDIS_URL", default="redis://localhost:6379/0")
 
 CHANNEL_LAYERS = {
     "default": {
@@ -245,26 +213,10 @@ CHANNEL_LAYERS = {
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
-
-from urllib.parse import urlparse
-
-parsed_url = urlparse(REDIS_URL)
-ssl_opts = None
-if parsed_url.scheme == "rediss":
-    ssl_opts = {"ssl_cert_reqs": ssl.CERT_NONE}  # CERT_NONE avoids verification errors
-    CELERY_BROKER_USE_SSL = ssl_opts
-    CELERY_RESULT_BACKEND_USE_SSL = ssl_opts
-else:
-    CELERY_BROKER_USE_SSL = None
-    CELERY_RESULT_BACKEND_USE_SSL = None
-
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
-
-
-# # Caching
 
 CACHES = {
     "default": {
@@ -275,89 +227,22 @@ CACHES = {
         },
     }
 }
-# settings.py
-# settings.py
-# import ssl
-
-# CACHES = {
-#     "default": {
-#         "BACKEND": "django_redis.cache.RedisCache",
-#         "LOCATION": REDIS_URL + "/0",
-#         "OPTIONS": {
-#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-#             "CONNECTION_POOL_KWARGS": {
-#                 "ssl_cert_reqs": ssl.CERT_NONE,
-#             },
-#             "SSL": True,  # <-- this tells redis-py to actually use SSL
-#         },
-#     }
-# }
-
-
-
-
-# Cache TTLs
-
-# -----------------------------
-# JWT / DRF
-# -----------------------------
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
-    "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": False,
-}
-
-# -----------------------------
-# Celery app initialization
-# -----------------------------
-app = Celery("p2p_comm")
-app.config_from_object("django.conf:settings", namespace="CELERY")
-app.autodiscover_tasks()
-
-
-# settings.py
-
-# Cache TTL values (in seconds)
 
 CACHE_TTL_SHORT = 60       # 1 minute
 CACHE_TTL_MED = 300        # 5 minutes
-CACHE_TTL_LONG = 3600      # 1 hour
+CACHE_TTL_LONG = 3600   # 1 hour
 
-
-# from celery import Celery
-
-
-# app = Celery("p2p_comm")
-# app.conf.update(timezone = 'Asia/Kolkata')
-# app.conf.update(
-#     broker_url=REDIS_URL,
-#     result_backend=REDIS_URL,
-#     redis_backend_use_ssl={
-#         "ssl_cert_reqs": ssl.CERT_NONE  # or CERT_REQUIRED / CERT_OPTIONAL
-#     },
-#     broker_use_ssl={
-#         "ssl_cert_reqs": ssl.CERT_NONE
-#     },
-# )
-
-
-
-# p2p_comm/settings.py
-
-# ... (at the end of the file) ...
-
+# -----------------------
+# Logging
+# -----------------------
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-        },
+        "console": {"class": "logging.StreamHandler"},
     },
     "root": {
         "handlers": ["console"],
-        "level": "INFO",  # <--- Set the level to INFO
+        "level": "INFO",
     },
 }
-
