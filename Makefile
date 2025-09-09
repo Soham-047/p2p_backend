@@ -1,18 +1,38 @@
+# Makefile
+
 start:
-	docker-compose up --build -d web celery
-	docker-compose logs -f web
+	docker-compose build --no-cache web celery
+	docker-compose up -d web celery
+	docker-compose logs -f web celery
 
 stop:
 	docker-compose down
 
-logs:
-	docker-compose logs -f
+restart: stop start
 
-migrate:
-	docker-compose run --rm web python manage.py migrate
+logs:
+	docker-compose logs -f web celery
+
+build:
+	docker-compose build --no-cache web celery
+
+ps:
+	docker-compose ps
 
 shell:
-	docker-compose run --rm web python manage.py shell
+	docker-compose exec web bash
+
+migrate:
+	docker-compose exec web python manage.py migrate
+
+makemigrations:
+	docker-compose exec web python manage.py makemigrations
 
 createsuperuser:
-	docker-compose run --rm web python manage.py createsuperuser
+	docker-compose exec web python manage.py createsuperuser
+
+collectstatic:
+	docker-compose exec web python manage.py collectstatic --noinput
+
+celery:
+	docker-compose exec celery celery -A p2p_comm worker -l info

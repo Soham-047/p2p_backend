@@ -3,6 +3,15 @@ from django.conf import settings
 from channels.middleware import BaseMiddleware
 from channels.db import database_sync_to_async
 from urllib.parse import parse_qs
+import os
+from celery import Celery
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "p2p_comm.settings")
+
+app = Celery("p2p_comm")
+app.config_from_object("django.conf:settings", namespace="CELERY")
+app.autodiscover_tasks()
+
 
 class JWTAuthMiddleware(BaseMiddleware):
     async def __call__(self, scope, receive, send):
