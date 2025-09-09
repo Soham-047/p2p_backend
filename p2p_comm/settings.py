@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config
 import os
-
+from celery import Celery
 
 def get_env(key, default=None, cast=str, required=False):
     """
@@ -67,6 +67,43 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+FERNET_KEY = get_env('FERNET_KEY', required=True).encode('utf-8')
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_ORIGINS = get_env(
+    "CORS_ALLOWED_ORIGINS", 
+    default="http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000,https://p2p-backend-e8bk.onrender.com",
+).split(",")
+
+
+CSRF_TRUSTED_ORIGINS = get_env(
+    "CSRF_TRUSTED_ORIGINS", 
+    default="https://p2p-backend-e8bk.onrender.com,https://*.onrender.com,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000",
+).split(",")
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
 
 ROOT_URLCONF = "p2p_comm.urls"
 
@@ -288,21 +325,21 @@ CACHE_TTL_MED = 300        # 5 minutes
 CACHE_TTL_LONG = 3600      # 1 hour
 
 
-from celery import Celery
+# from celery import Celery
 
 
-app = Celery("p2p_comm")
-app.conf.update(timezone = 'Asia/Kolkata')
-app.conf.update(
-    broker_url=REDIS_URL,
-    result_backend=REDIS_URL,
-    redis_backend_use_ssl={
-        "ssl_cert_reqs": ssl.CERT_NONE  # or CERT_REQUIRED / CERT_OPTIONAL
-    },
-    broker_use_ssl={
-        "ssl_cert_reqs": ssl.CERT_NONE
-    },
-)
+# app = Celery("p2p_comm")
+# app.conf.update(timezone = 'Asia/Kolkata')
+# app.conf.update(
+#     broker_url=REDIS_URL,
+#     result_backend=REDIS_URL,
+#     redis_backend_use_ssl={
+#         "ssl_cert_reqs": ssl.CERT_NONE  # or CERT_REQUIRED / CERT_OPTIONAL
+#     },
+#     broker_use_ssl={
+#         "ssl_cert_reqs": ssl.CERT_NONE
+#     },
+# )
 
 
 
