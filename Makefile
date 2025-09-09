@@ -1,9 +1,9 @@
 # Makefile
 
 start:
-	docker-compose build --no-cache web celery
-	docker-compose up -d web celery
-	docker-compose logs -f web celery
+	docker-compose build --no-cache
+	docker-compose up -d
+	docker-compose logs -f
 
 stop:
 	docker-compose down
@@ -11,10 +11,10 @@ stop:
 restart: stop start
 
 logs:
-	docker-compose logs -f web celery
+	docker-compose logs -f
 
 build:
-	docker-compose build --no-cache web celery
+	docker-compose build --no-cache
 
 ps:
 	docker-compose ps
