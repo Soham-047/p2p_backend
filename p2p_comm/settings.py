@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import timedelta
 from decouple import config
 import os
-
+from celery import Celery
 
 def get_env(key, default=None, cast=str, required=False):
     """
@@ -288,21 +288,21 @@ CACHE_TTL_MED = 300        # 5 minutes
 CACHE_TTL_LONG = 3600      # 1 hour
 
 
-from celery import Celery
+# from celery import Celery
 
 
-app = Celery("p2p_comm")
-app.conf.update(timezone = 'Asia/Kolkata')
-app.conf.update(
-    broker_url=REDIS_URL,
-    result_backend=REDIS_URL,
-    redis_backend_use_ssl={
-        "ssl_cert_reqs": ssl.CERT_NONE  # or CERT_REQUIRED / CERT_OPTIONAL
-    },
-    broker_use_ssl={
-        "ssl_cert_reqs": ssl.CERT_NONE
-    },
-)
+# app = Celery("p2p_comm")
+# app.conf.update(timezone = 'Asia/Kolkata')
+# app.conf.update(
+#     broker_url=REDIS_URL,
+#     result_backend=REDIS_URL,
+#     redis_backend_use_ssl={
+#         "ssl_cert_reqs": ssl.CERT_NONE  # or CERT_REQUIRED / CERT_OPTIONAL
+#     },
+#     broker_use_ssl={
+#         "ssl_cert_reqs": ssl.CERT_NONE
+#     },
+# )
 
 
 
