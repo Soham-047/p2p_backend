@@ -228,6 +228,10 @@ CACHES = {
     }
 }
 
+CACHE_TTL_SHORT = 60       # 1 minute
+CACHE_TTL_MED = 300        # 5 minutes
+CACHE_TTL_LONG = 3600   # 1 hour
+
 # -----------------------
 # Logging
 # -----------------------
