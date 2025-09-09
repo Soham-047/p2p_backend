@@ -158,12 +158,25 @@ REST_FRAMEWORK = {
     },
 }
 
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
 }
+
+REST_FRAMEWORK.update({
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+})
+# SIMPLE_JWT = {
+#     "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
+#     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+#     "ROTATE_REFRESH_TOKENS": False,
+#     "BLACKLIST_AFTER_ROTATION": False,
+#     # add more config here if needed (algorithms, signing key, etc.)
+# }
+
 
 # -----------------------
 # Email
@@ -213,6 +226,9 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
 
+
+# # Caching
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -222,11 +238,55 @@ CACHES = {
         },
     }
 }
+# settings.py
+# settings.py
+# import ssl
+
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": REDIS_URL + "/0",
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#             "CONNECTION_POOL_KWARGS": {
+#                 "ssl_cert_reqs": ssl.CERT_NONE,
+#             },
+#             "SSL": True,  # <-- this tells redis-py to actually use SSL
+#         },
+#     }
+# }
+
+
+
 
 # Cache TTLs
+
+# -----------------------------
+# JWT / DRF
+# -----------------------------
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+}
+
+# -----------------------------
+# Celery app initialization
+# -----------------------------
+app = Celery("p2p_comm")
+app.config_from_object("django.conf:settings", namespace="CELERY")
+app.autodiscover_tasks()
+
+
+# settings.py
+
+# Cache TTL values (in seconds)
+
 CACHE_TTL_SHORT = 60       # 1 minute
 CACHE_TTL_MED = 300        # 5 minutes
 CACHE_TTL_LONG = 3600      # 1 hour
+
 
 from celery import Celery
 
@@ -243,3 +303,24 @@ app.conf.update(
         "ssl_cert_reqs": ssl.CERT_NONE
     },
 )
+
+
+
+# p2p_comm/settings.py
+
+# ... (at the end of the file) ...
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",  # <--- Set the level to INFO
+    },
+}
+

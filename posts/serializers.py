@@ -104,15 +104,25 @@ class ReplySerializer(serializers.ModelSerializer):
 # search/serializers.py
 
 
-
+import base64
+from django.urls import reverse
 class UserSearchSerializer(serializers.ModelSerializer):
     """
     Serializer for representing users in search results.
     """
+    avatar = serializers.SerializerMethodField()
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'full_name']
+        fields = ['id', 'username', 'full_name', 'avatar']
 
+    def get_avatar(self, obj):
+        profile = getattr(obj, 'profile', None)
+        if profile and profile.avatar_blob:
+            # return f"data:{profile.avatar_content_type};base64,{base64.b64encode(profile.avatar_blob).decode()}"
+            return self.context["request"].build_absolute_uri(
+                reverse("profile-avatar", args=[obj.id])
+            )
+        return None
 class PostSearchSerializer(serializers.ModelSerializer):
     """
     Serializer for representing posts in search results.
