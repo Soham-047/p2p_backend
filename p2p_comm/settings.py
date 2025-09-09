@@ -268,7 +268,7 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
 
-# Caching
+# # Caching
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -278,6 +278,25 @@ CACHES = {
         },
     }
 }
+# settings.py
+# settings.py
+# import ssl
+
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": REDIS_URL + "/0",
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#             "CONNECTION_POOL_KWARGS": {
+#                 "ssl_cert_reqs": ssl.CERT_NONE,
+#             },
+#             "SSL": True,  # <-- this tells redis-py to actually use SSL
+#         },
+#     }
+# }
+
+
 
 # -----------------------------
 # JWT / DRF
@@ -303,3 +322,23 @@ app.autodiscover_tasks()
 CACHE_TTL_SHORT = 60       # 1 minute
 CACHE_TTL_MED = 300        # 5 minutes
 CACHE_TTL_LONG = 3600      # 1 hour
+
+
+
+# p2p_comm/settings.py
+
+# ... (at the end of the file) ...
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",  # <--- Set the level to INFO
+    },
+}
