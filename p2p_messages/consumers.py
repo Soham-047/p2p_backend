@@ -167,6 +167,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # DO NOT create the connection here in the sync __init__
         self.redis_conn = None 
 
+    async def user_online_status(self, event):
+        """
+        Handles the 'user_online_status' event from the channel layer.
+        """
+        # Forward the online status update to the client (browser).
+        await self.send(text_data=json.dumps({
+            'type': 'online_status_update', # This is the type your JS will look for
+            'user_id': event['user_id'],
+            'is_online': event['is_online']
+        }))
+
     async def connect(self):
         # 2. ESTABLISH THE ASYNC CONNECTION HERE
         try:
@@ -203,27 +214,51 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
-
+        if self.room_group_name:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {"type": "user_online_status", "user_id": self.receiver.username, "is_online": True}
+            )
         # Mark messages as read, now with await
         unread_key = redis_helpers.unread_key(self.sender.id)
         # 3. AWAIT EVERY REDIS COMMAND
         await self.redis_conn.hdel(unread_key, self.receiver.id)
 
-    async def disconnect(self, close_code):
-        # if self.room_group_name:
-        #     await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+    # async def disconnect(self, close_code):
+    #     # if self.room_group_name:
+    #     #     await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
         
-        # # Gracefully close the Redis connection
-        # if self.redis_conn:
-        #     await self.redis_conn.close()
+    #     # # Gracefully close the Redis connection
+    #     # if self.redis_conn:
+    #     #     await self.redis_conn.close()
             
-        # logger.info(f"WebSocket disconnected (user={self.sender}, code={close_code})")
+    #     # logger.info(f"WebSocket disconnected (user={self.sender}, code={close_code})")
 
+    #     if self.room_group_name:
+    #         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+    #     if self.redis_conn:
+    #         await self.redis_conn.close()
+    #     logger.info("WebSocket disconnected")
+
+    # chat/consumers.py
+
+    async def disconnect(self, close_code):
+        # This method is AUTOMATICALLY called by the server in BOTH cases 
+        # (clean and unclean disconnections).
+        
+        # Remove user from the online set in Redis
+        try:
+            await self.redis_conn.srem("online_users", self.sender.id)
+            logger.info(f"User {self.sender.id} disconnected and was removed from online_users set.")
+        except Exception as e:
+            logger.error(f"Failed to remove user {self.sender.id} from online set: {e}")
+
+        # Broadcast to the room that this user is now offline
         if self.room_group_name:
-            await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-        if self.redis_conn:
-            await self.redis_conn.close()
-        logger.info("WebSocket disconnected")
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {"type": "user_online_status", "user_id": self.sender.username, "is_online": False}
+            )
 
 
     # async def receive(self, text_data):
