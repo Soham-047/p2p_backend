@@ -68,6 +68,43 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+FERNET_KEY = get_env('FERNET_KEY', required=True).encode('utf-8')
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_ORIGINS = get_env(
+    "CORS_ALLOWED_ORIGINS", 
+    default="http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000,https://p2p-backend-e8bk.onrender.com",
+).split(",")
+
+
+CSRF_TRUSTED_ORIGINS = get_env(
+    "CSRF_TRUSTED_ORIGINS", 
+    default="https://p2p-backend-e8bk.onrender.com,https://*.onrender.com,http://localhost:5173,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000",
+).split(",")
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+
 ROOT_URLCONF = "p2p_comm.urls"
 
 TEMPLATES = [
