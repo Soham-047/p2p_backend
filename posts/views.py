@@ -89,8 +89,8 @@ class PostListCreateView(APIView):
         
         serializer = PostSerializer(posts, many=True)
         
+        cache_set(cache_key, serializer.data, POSTS_TTL)
         # cache_set(cache_key, serializer.data, timeout=None)
-        cache_set(cache_key, serializer.data, timeout=None)
 
         return Response(serializer.data)
 

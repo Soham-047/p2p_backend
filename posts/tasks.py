@@ -63,8 +63,8 @@ def warm_posts_list_cache(self,*args, **kwargs):
         log.info(f"VERIFYING TIMEOUT: The default timeout loaded by this worker is: {cache.default_timeout}")
         qs = Post.objects.select_related("author").prefetch_related("tags", "mentions").order_by("-created_at")[:200]
         serializer = PostSerializer(qs, many=True)
-        cache_set(key_posts_list(), serializer.data, timeout=None)
-        # cache_set(key_posts_list(), serializer.data, POSTS_TTL)  
+        # cache_set(key_posts_list(), serializer.data, timeout=None)
+        cache_set(key_posts_list(), serializer.data, POSTS_TTL)  
 
         log.info(f"List is cached. {len(serializer.data)} posts were updated.{key_posts_list()}")
         return len(serializer.data)
