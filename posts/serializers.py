@@ -80,6 +80,11 @@ class CommentSerializer(serializers.ModelSerializer):
             return obj.author.full_name
         return None
 
+class CommentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ['content']
+        read_only_fields = ["slug", "author", "created_at", "updated_at"]
 
 class ReplySerializer(serializers.ModelSerializer):
     author = serializers.CharField(source="author.full_name", read_only=True)
