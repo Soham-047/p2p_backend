@@ -1,7 +1,7 @@
 from django.core.cache import cache
 from django.conf import settings
 
-POSTS_TTL = getattr(settings, "POSTS_CACHE_TTL", 86400)
+POSTS_TTL = getattr(settings, "POSTS_CACHE_TTL", 60)
 COMMENTS_TTL = getattr(settings, "COMMENTS_CACHE_TTL", 180)
 
 # Cache keys
