@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from django.utils.dateparse import parse_datetime
 # Django
 from django.conf import settings
 from django.core.cache import cache
@@ -210,93 +210,228 @@ class DecryptMessageView(APIView):
 )
 
 
+# class ChatHistoryView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request, username, *args, **kwargs):
+#         other_user = get_object_or_404(User, username=username)
+#         redis_conn = r()
+#         key = chat_key(request.user.id, other_user.id)
+#         fernet = Fernet(settings.FERNET_KEY)
+#         response_data = []
+
+#         # When fetching history, mark messages from the other user as read.
+#         redis_conn.hdel(unread_key(request.user.id), other_user.id)
+
+#         # 1. Try to fetch from Redis cache first
+#         cached_messages_json = redis_conn.lrange(key, 0, 99)
+        
+#         if cached_messages_json:
+#             # CORRECT: Parse all JSON strings into a list of dictionaries ONCE.
+#             cached_messages = [json.loads(msg) for msg in cached_messages_json]
+#             sender_ids = {
+#                 msg.get('sender_id') for msg in cached_messages if msg.get('sender_id') is not None
+#             }
+
+#             users = User.objects.filter(id__in=sender_ids)
+#             user_map = {user.id: user.username for user in users}
+
+#             # CORRECT: Loop directly over the list of dictionaries.
+#             for msg in cached_messages: # `msg` is now a dictionary.
+#                 # REMOVED: The redundant line `msg = json.loads(msg_json)` is gone.
+#                 sender_id = msg.get('sender_id')
+#                 if not sender_id:
+#                     continue # Skip this malformed message
+#                 try:
+#                     # Note: The `bytes()` constructor here is not needed since you are encoding a string.
+#                     # decrypted_message = fernet.decrypt(msg['ciphertext'].encode('latin1')).decode('utf-8')
+#                     encrypted_bytes = base64.b64decode(msg['ciphertext'])
+#                     decrypted_message = fernet.decrypt(encrypted_bytes).decode('utf-8')
+#                 except (InvalidToken, base64.binascii.Error):
+#                     decrypted_message = "[Decryption Failed]"
+                
+#                 sender_username = user_map.get(msg['sender_id'], "Unknown User")
+                
+#                 response_data.append({
+#                     'id': msg['id'],
+#                     'sender': sender_username,
+#                     'receiver': other_user.username if sender_username == request.user.username else request.user.username,
+#                     'timestamp': msg['timestamp'],
+#                     'message': decrypted_message
+#                 })
+            
+#             response_data.reverse()
+#             return Response(response_data)
+
+#         # 2. Cache miss: Fallback to database (This section was already correct)
+#         messages = Message.objects.filter(
+#             (Q(sender=request.user, receiver=other_user)) |
+#             (Q(sender=other_user, receiver=request.user))
+#         ).order_by('timestamp')
+
+#         cache_pipeline = redis_conn.pipeline()
+#         for msg in messages:
+#             try:
+#                 decrypted_message = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
+#             except InvalidToken:
+#                 decrypted_message = "[Decryption Failed]"
+            
+#             response_data.append({
+#                 'id': msg.id,
+#                 'sender': msg.sender.username,
+#                 'receiver': msg.receiver.username,
+#                 'timestamp': msg.timestamp,
+#                 'message': decrypted_message
+#             })
+            
+#             message_payload = {
+#                 "id": msg.id,
+#                 "sender_id": msg.sender.id,
+#                 "ciphertext": base64.b64encode(bytes(msg.ciphertext)).decode('utf-8'),
+#                 "timestamp": msg.timestamp.isoformat(),
+#             }
+#             cache_pipeline.lpush(key, json.dumps(message_payload))
+        
+#         if messages:
+#             cache_pipeline.ltrim(key, 0, 99)
+#             cache_pipeline.execute()
+
+#         return Response(response_data)
+
+
+
+
+
 class ChatHistoryView(APIView):
+    """
+    API view to retrieve chat history between two users.
+    Supports caching for the 100 most recent messages and
+    cursor-based pagination to load older messages.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, username, *args, **kwargs):
+        # Check for the pagination cursor in the query parameters
+        before_timestamp_str = request.query_params.get('before_timestamp', None)
+        before_timestamp = None
+        if before_timestamp_str:
+            before_timestamp = parse_datetime(before_timestamp_str)
+
         other_user = get_object_or_404(User, username=username)
         redis_conn = r()
         key = chat_key(request.user.id, other_user.id)
         fernet = Fernet(settings.FERNET_KEY)
         response_data = []
 
-        # When fetching history, mark messages from the other user as read.
-        redis_conn.hdel(unread_key(request.user.id), other_user.id)
+        # --- Path A: Initial Load (No Cursor) ---
+        if not before_timestamp:
+            # When fetching the latest history, mark messages from this user as read.
+            redis_conn.hdel(unread_key(request.user.id), other_user.id)
 
-        # 1. Try to fetch from Redis cache first
-        cached_messages_json = redis_conn.lrange(key, 0, 99)
-        
-        if cached_messages_json:
-            # CORRECT: Parse all JSON strings into a list of dictionaries ONCE.
-            cached_messages = [json.loads(msg) for msg in cached_messages_json]
-            sender_ids = {
-                msg.get('sender_id') for msg in cached_messages if msg.get('sender_id') is not None
-            }
+            # 1. Try to fetch the latest 100 messages from Redis cache
+            cached_messages_json = redis_conn.lrange(key, 0, 99)
+            
+            if cached_messages_json:
+                # CACHE HIT: Build the response from cached data
+                cached_messages = [json.loads(msg) for msg in cached_messages_json]
+                sender_ids = { msg.get('sender_id') for msg in cached_messages if msg.get('sender_id') is not None }
+                
+                users = User.objects.filter(id__in=sender_ids)
+                user_map = {user.id: user.username for user in users}
 
-            users = User.objects.filter(id__in=sender_ids)
-            user_map = {user.id: user.username for user in users}
+                for msg in cached_messages:
+                    sender_id = msg.get('sender_id')
+                    if not sender_id: continue
+                    try:
+                        encrypted_bytes = base64.b64decode(msg['ciphertext'])
+                        decrypted_message = fernet.decrypt(encrypted_bytes).decode('utf-8')
+                    except (InvalidToken, base64.binascii.Error):
+                        decrypted_message = "[Decryption Failed]"
+                    
+                    sender_username = user_map.get(msg['sender_id'], "Unknown User")
+                    
+                    response_data.append({
+                        'id': msg.get('id'),
+                        'sender': sender_username,
+                        'receiver': other_user.username if sender_username == request.user.username else request.user.username,
+                        'timestamp': msg.get('timestamp'),
+                        'message': decrypted_message
+                    })
+                
+                response_data.reverse() # Reverse to show oldest first, newest last
+                return Response(response_data)
 
-            # CORRECT: Loop directly over the list of dictionaries.
-            for msg in cached_messages: # `msg` is now a dictionary.
-                # REMOVED: The redundant line `msg = json.loads(msg_json)` is gone.
-                sender_id = msg.get('sender_id')
-                if not sender_id:
-                    continue # Skip this malformed message
+            # 2. CACHE MISS: Fallback to the database for the initial load
+            messages = Message.objects.filter(
+                (Q(sender=request.user, receiver=other_user)) |
+                (Q(sender=other_user, receiver=request.user))
+            ).order_by('-timestamp')[:100] # Get the 100 most recent messages
+
+            cache_pipeline = redis_conn.pipeline()
+            # Delete the key to ensure a clean repopulation
+            cache_pipeline.delete(key) 
+
+            for msg in messages:
+                # The response data is built in reverse chronological order
                 try:
-                    # Note: The `bytes()` constructor here is not needed since you are encoding a string.
-                    # decrypted_message = fernet.decrypt(msg['ciphertext'].encode('latin1')).decode('utf-8')
-                    encrypted_bytes = base64.b64decode(msg['ciphertext'])
-                    decrypted_message = fernet.decrypt(encrypted_bytes).decode('utf-8')
-                except (InvalidToken, base64.binascii.Error):
+                    decrypted_message = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
+                except InvalidToken:
                     decrypted_message = "[Decryption Failed]"
                 
-                sender_username = user_map.get(msg['sender_id'], "Unknown User")
-                
                 response_data.append({
-                    'id': msg['id'],
-                    'sender': sender_username,
-                    'receiver': other_user.username if sender_username == request.user.username else request.user.username,
-                    'timestamp': msg['timestamp'],
+                    'id': msg.id,
+                    'sender': msg.sender.username,
+                    'receiver': msg.receiver.username,
+                    'timestamp': msg.timestamp.isoformat(),
                     'message': decrypted_message
                 })
+                
+                # The cache is populated in reverse chronological order (newest first)
+                message_payload = {
+                    "id": msg.id,
+                    "sender_id": msg.sender.id,
+                    "ciphertext": base64.b64encode(bytes(msg.ciphertext)).decode('utf-8'),
+                    "timestamp": msg.timestamp.isoformat(),
+                }
+                cache_pipeline.lpush(key, json.dumps(message_payload))
             
-            response_data.reverse()
+            if messages:
+                cache_pipeline.ltrim(key, 0, 99)
+                cache_pipeline.execute()
+            
+            response_data.reverse() # Reverse to show oldest first, newest last
             return Response(response_data)
 
-        # 2. Cache miss: Fallback to database (This section was already correct)
-        messages = Message.objects.filter(
-            (Q(sender=request.user, receiver=other_user)) |
-            (Q(sender=other_user, receiver=request.user))
-        ).order_by('timestamp')
+        # --- Path B: Paginating for Older Messages (Cursor is Present) ---
+        else:
+            # We are fetching older messages, so we go STRAIGHT to the database.
+            # No need to check or update the Redis cache for these historical queries.
+            messages = Message.objects.filter(
+                (Q(sender=request.user, receiver=other_user)) |
+                (Q(sender=other_user, receiver=request.user)),
+                timestamp__lt=before_timestamp  # <-- The key pagination filter
+            ).order_by('-timestamp')[:50]  # <-- Get the next 50 messages in a "page"
 
-        cache_pipeline = redis_conn.pipeline()
-        for msg in messages:
-            try:
-                decrypted_message = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
-            except InvalidToken:
-                decrypted_message = "[Decryption Failed]"
-            
-            response_data.append({
-                'id': msg.id,
-                'sender': msg.sender.username,
-                'receiver': msg.receiver.username,
-                'timestamp': msg.timestamp,
-                'message': decrypted_message
-            })
-            
-            message_payload = {
-                "id": msg.id,
-                "sender_id": msg.sender.id,
-                "ciphertext": base64.b64encode(bytes(msg.ciphertext)).decode('utf-8'),
-                "timestamp": msg.timestamp.isoformat(),
-            }
-            cache_pipeline.lpush(key, json.dumps(message_payload))
-        
-        if messages:
-            cache_pipeline.ltrim(key, 0, 99)
-            cache_pipeline.execute()
+            for msg in messages:
+                try:
+                    decrypted_message = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
+                except InvalidToken:
+                    decrypted_message = "[Decryption Failed]"
+                
+                response_data.append({
+                    'id': msg.id,
+                    'sender': msg.sender.username,
+                    'receiver': msg.receiver.username,
+                    'timestamp': msg.timestamp.isoformat(),
+                    'message': decrypted_message
+                })
 
-        return Response(response_data)
+            response_data.reverse() # Reverse to show oldest first, newest last for this page
+            return Response(response_data)
+
+
+
+
 # --------------------------
 # Recent Chats
 # --------------------------

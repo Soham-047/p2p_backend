@@ -1,7 +1,7 @@
 from django.core.cache import cache
 from django.conf import settings
 
-POSTS_TTL = getattr(settings, "POSTS_CACHE_TTL", 300)
+POSTS_TTL = getattr(settings, "POSTS_CACHE_TTL", 86400)
 COMMENTS_TTL = getattr(settings, "COMMENTS_CACHE_TTL", 180)
 
 # Cache keys
@@ -21,9 +21,12 @@ def key_post_likes_count(slug: str) -> str:
 def cache_get(key: str):
     return cache.get(key)
 
-def cache_set(key: str, value, ttl: int):
-    cache.set(key, value, ttl)
-
+# def cache_set(key: str, value, ttl: int):
+#     cache.set(key, value, ttl)
+# The 3rd parameter is now named 'timeout'
+def cache_set(key: str, value, timeout):
+    # The value 300 from POSTS_TTL is correctly assigned to the 'timeout' parameter
+    cache.set(key, value, timeout=timeout)
 def cache_delete(*keys: str):
     for k in keys:
         cache.delete(k)

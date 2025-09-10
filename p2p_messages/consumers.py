@@ -217,7 +217,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if self.room_group_name:
             await self.channel_layer.group_send(
                 self.room_group_name,
-                {"type": "user_online_status", "user_id": self.receiver.username, "is_online": True}
+                {"type": "user_online_status", "user_id": self.sender.username, "is_online": True}
             )
         # Mark messages as read, now with await
         unread_key = redis_helpers.unread_key(self.sender.id)
