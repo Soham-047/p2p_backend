@@ -22,7 +22,12 @@ from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Tag
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample, OpenApiParameter, OpenApiTypes,extend_schema_view
 from rest_framework import serializers
-
+from rest_framework.pagination import PageNumberPagination
+from django.core.cache import cache
+from .cache import *
+import logging
+import time
+log = logging.getLogger(__name__)
 
 
 
@@ -36,9 +41,57 @@ class PostListCreateView(APIView):
         responses={200: PostSerializer(many=True)},
         tags=["Posts"],
     )
+    # def get(self, request):
+    #     posts = Post.objects.all()
+    #     serializer = PostSerializer(posts, many=True)
+    #     return Response(serializer.data)
+
+    # def get(self, request):
+    #     # 1. Generate the predictable cache key
+    #     cache_key = key_posts_list()
+        
+    #     # 2. Try to get the data from the cache first
+    #     cached_data = cache.get(cache_key)
+
+    #     # 3. Cache Hit: If data is found, return it immediately
+    #     if cached_data is not None:
+    #         print("Serving posts list from CACHE!") # For debugging
+    #         return Response(cached_data)
+
+    #     # 4. Cache Miss: If no data, query the database
+    #     print("Serving posts list from DATABASE.") # For debugging
+    #     posts = Post.objects.all()
+    #     serializer = PostSerializer(posts, many=True)
+        
+    #     # 5. Store the new data in the cache for next time
+    #     cache.set(cache_key, serializer.data, timeout=None) # timeout in seconds
+
+    #     return Response(serializer.data)
+
+
+    # p2p_backend/posts/views.py
+
     def get(self, request):
-        posts = Post.objects.all()
+        cache_key = key_posts_list()
+        print("cache_key", cache_key)
+        cached_data = cache_get(cache_key)
+
+        if cached_data is not None:
+            print("Serving posts list from CACHE!") 
+            return Response(cached_data)
+
+        print("Serving posts list from DATABASE.")
+        
+        # --- THIS IS THE FIX ---
+        # Optimize the queryset BEFORE it goes to the serializer
+        posts = Post.objects.select_related("author").prefetch_related("tags", "mentions").all()
+        # ----------------------
+        
         serializer = PostSerializer(posts, many=True)
+        
+        cache_set(cache_key, serializer.data, POSTS_TTL)
+        # cache_set(cache_key, serializer.data, timeout=None)
+
         return Response(serializer.data)
 
     @extend_schema(
@@ -87,12 +140,30 @@ class PostDetailView(APIView):
         },
         tags=["Posts"],
     )
+    # def get(self, request, slug):
+    #     try:
+    #         post = Post.objects.get(slug=slug)
+    #     except Post.DoesNotExist:
+    #         return Response(status=status.HTTP_404_NOT_FOUND)
+    #     serializer = PostSerializer(post)
+    #     return Response(serializer.data)
+
     def get(self, request, slug):
+        cache_key = key_post_detail(slug)
+
+        caches_data = cache_get(cache_key)
+
+        if caches_data is not None:
+            print("Serving post detail from CACHE!") # For debugging
+            return Response(caches_data)
+
+        print("Serving post detail from DATABASE.") # For debugging
         try:
             post = Post.objects.get(slug=slug)
         except Post.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = PostSerializer(post)
+        cache_set(cache_key, serializer.data, POSTS_TTL) # timeout in seconds
         return Response(serializer.data)
 
     @extend_schema(
@@ -207,7 +278,7 @@ class PostCommentsView(APIView):
         examples=[
             OpenApiExample(
                 "Example request",
-                value={"content": "This is a comment.", "parent": None, "author": 1},
+                value={"content": "This is a comment.", "parent": None},
                 request_only=True,
                 response_only=False,
             )
@@ -223,7 +294,32 @@ class PostCommentsView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save(author=request.user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+from .serializers import CommentUpdateSerializer
+class CommentUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+    # serializer_class = CommentUpdateSerializer
 
+    @extend_schema(
+        summary="Update a comment",
+        description="Update a comment identified by slug.",
+        request=CommentUpdateSerializer,
+        responses={
+            200: OpenApiResponse(description="Comment updated successfully."),
+            400: OpenApiResponse(description="Validation error"),
+            404: OpenApiResponse(description="Comment not found"),
+        },
+        tags=["Comments"],
+    )
+    def put(self, request, slug):
+        try:
+            comment = Comment.objects.get(slug=slug)
+        except Comment.DoesNotExist:
+            return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CommentUpdateSerializer(comment, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 class CommentDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -538,6 +634,9 @@ class LikeComment(APIView):
             comment = Comment.objects.get(slug=slug)
         except Comment.DoesNotExist:
             return Response({"detail": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
+        if(comment.likes.filter(id=request.user.id).exists()):
+            comment.likes.remove(request.user)
+            return Response({"detail": "Comment unliked successfully"}, status=status.HTTP_200_OK)
         comment.likes.add(request.user)
         return Response({"detail": "Comment liked successfully"}, status=status.HTTP_200_OK)
 

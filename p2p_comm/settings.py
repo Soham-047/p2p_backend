@@ -197,11 +197,18 @@ EMAIL_HOST_USER = "apikey"
 EMAIL_HOST_PASSWORD = get_env("EMAIL_API_KEY", required=True)
 DEFAULT_FROM_EMAIL = get_env("EMAIL_ID", required=True)
 
-# -----------------------
-# Redis / Celery / Cache
-# -----------------------
-REDIS_URL = get_env("REDIS_URL", default="redis://localhost:6379/0")
 
+
+# -----------------------
+# Redis / Channel Layers / Celery / Cache
+# -----------------------
+
+REDIS_URL = get_env(
+    "REDIS_URL",
+    default="redis://localhost:6379/0"  # local fallback
+)
+# REDIS_URL = get_env("REDIS_URL", default="redis://localhost:6379")
+# Channels
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -211,6 +218,7 @@ CHANNEL_LAYERS = {
     },
 }
 
+# Celery
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_ACCEPT_CONTENT = ["application/json"]
@@ -225,9 +233,34 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
+        # "TIMEOUT": None,
     }
 }
 
+
+
+
+# -----------------------------
+# JWT / DRF
+# -----------------------------
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+}
+
+# # -----------------------------
+# # Celery app initialization
+# # -----------------------------
+# app = Celery("p2p_comm")
+# app.config_from_object("django.conf:settings", namespace="CELERY")
+# app.autodiscover_tasks()
+
+
+# settings.py
+
+# Cache TTL values (in seconds)
 CACHE_TTL_SHORT = 60       # 1 minute
 CACHE_TTL_MED = 300        # 5 minutes
 CACHE_TTL_LONG = 3600   # 1 hour

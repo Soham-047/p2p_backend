@@ -24,7 +24,7 @@ class TagSerializer(serializers.ModelSerializer):
                 counter += 1
             data["slug"] = unique_slug
         return data
-
+import re
 class PostSerializer(serializers.ModelSerializer):
     tags = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
     tag_names = serializers.SlugRelatedField(
@@ -47,9 +47,17 @@ class PostSerializer(serializers.ModelSerializer):
         tags_data = validated_data.pop('tags', [])
         user = self.context['request'].user
         post = Post.objects.create(author=user, **validated_data)
+
         for tag_name in tags_data:
             tag, _ = Tag.objects.get_or_create(name=tag_name)
             post.tags.add(tag)
+
+        mentioned_usernames = re.findall(r'@(\w+)', validated_data['content'])
+        if mentioned_usernames:
+            mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
+            post.mentions.set(mentioned_users)
+        else:
+            post.mentions.clear()
         return post
 
     def update(self, instance, validated_data):
@@ -57,11 +65,21 @@ class PostSerializer(serializers.ModelSerializer):
         for attr, val in validated_data.items():
             setattr(instance, attr, val)
         instance.save()
+
         if tags_data is not None:
             instance.tags.clear()
             for tag_name in tags_data:
                 tag, _ = Tag.objects.get_or_create(name=tag_name)
                 instance.tags.add(tag)
+
+        content = validated_data.get('content', instance.content)
+        mentioned_usernames = re.findall(r'@(\w+)', content)
+        if mentioned_usernames:
+            mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
+            instance.mentions.set(mentioned_users)
+        else:
+            instance.mentions.clear()
+        
         return instance
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -79,7 +97,37 @@ class CommentSerializer(serializers.ModelSerializer):
         if obj.author and hasattr(obj.author, 'full_name'):
             return obj.author.full_name
         return None
+    
+    def create(self, validated_data):
+        comment = Comment.objects.create(**validated_data)
+        mentioned_usernames = re.findall(r'@(\w+)', validated_data['content'])
+        if mentioned_usernames:
+            mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
+            comment.mentions.set(mentioned_users)
+        else:
+            comment.mentions.clear()
+        return comment
 
+class CommentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ['content']
+        read_only_fields = ["slug", "author", "created_at", "updated_at"]
+
+    def update(self, instance, validated_data):
+        # update content
+        instance.content = validated_data.get("content", instance.content)
+        instance.save()
+
+        # handle mentions
+        mentioned_usernames = re.findall(r'@(\w+)', instance.content)
+        if mentioned_usernames:
+            mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
+            instance.mentions.set(mentioned_users)
+        else:
+            instance.mentions.clear()
+
+        return instance
 
 class ReplySerializer(serializers.ModelSerializer):
     author = serializers.CharField(source="author.full_name", read_only=True)

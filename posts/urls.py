@@ -17,6 +17,7 @@ from .views import (
     LikeCountComment,
     UserSearchAPIView,
     TagSearchAPIView,
+    CommentUpdateView,
 )
 
 urlpatterns = [
@@ -26,6 +27,9 @@ urlpatterns = [
 
     # COMMENTS - List & Create for a Post
     path('<slug:slug>/comments/', PostCommentsView.as_view(), name='post-comments'),
+
+    #Update a comment
+    path('comments/<slug:slug>/update/', CommentUpdateView.as_view(), name='comment-update'),
 
     # COMMENT - Detail, Update, Delete by Comment Slug
     path('comments/<slug:slug>/', CommentDetailView.as_view(), name='comment-detail'),
@@ -55,8 +59,8 @@ urlpatterns = [
     #create and list Reply to a comment
     path("comments/<slug:slug>/replies/", ListCreateCommentReplies.as_view(), name="comment-replies"),
 
-    #Like a comment
-    path("comments/<slug:slug>/like/", LikeComment.as_view(), name="like-comment"),
+    #Like and unlike a comment
+    path("comments/<slug:slug>/like-unlike/", LikeComment.as_view(), name="like-comment"),
 
     # return count of likes in a comment and whether the user has liked the comment
     path("comments/<slug:slug>/like-count/", LikeCountComment.as_view(), name="comment-like-count"),
