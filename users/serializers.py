@@ -115,7 +115,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     dob = serializers.DateField(required=False, allow_null=True)
     achievements = serializers.CharField(required=False, allow_blank=True)
 
-    avatar_url = serializers.SerializerMethodField(read_only=True)
+    # ✅ Now writable
+    avatar_url = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     experiences = ExperienceSerializer(many=True, read_only=True)
     educations = EducationSerializer(many=True, read_only=True)
@@ -135,16 +136,11 @@ class ProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["updated_at"]
 
-    def get_avatar_url(self, obj):
-        request = self.context.get("request")
-        if request and obj and obj.has_avatar():
-            return request.build_absolute_uri(f"/api/profile/{obj.user.username}/avatar/")
-        return None
-
     def update(self, instance, validated_data):
         user_data = validated_data.pop("user", {})
         user = instance.user
 
+        # update user fields
         if "username" in user_data:
             username = user_data["username"]
             if User.objects.exclude(pk=user.pk).filter(username=username).exists():
@@ -156,7 +152,12 @@ class ProfileSerializer(serializers.ModelSerializer):
                 setattr(user, attr, user_data[attr])
         user.save()
 
+        # ✅ Handle avatar_url update
+        if "avatar_url" in validated_data:
+            instance.avatar_url = validated_data["avatar_url"]
+
         return super().update(instance, validated_data)
+
 
 # -------------------------------
 # Me Profile
