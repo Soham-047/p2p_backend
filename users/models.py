@@ -36,13 +36,14 @@ class Profile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     # Avatar fields...
-    avatar_blob = models.BinaryField(blank=True, null=True, editable=True)
-    avatar_content_type = models.CharField(max_length=120, blank=True, null=True)
-    avatar_filename = models.CharField(max_length=255, blank=True, null=True)
-    avatar_size = models.PositiveIntegerField(blank=True, null=True)
+    # avatar_blob = models.BinaryField(blank=True, null=True, editable=True)
+    # avatar_content_type = models.CharField(max_length=120, blank=True, null=True)
+    # avatar_filename = models.CharField(max_length=255, blank=True, null=True)
+    # avatar_size = models.PositiveIntegerField(blank=True, null=True)
+    avatar_url = models.URLField(max_length=500, blank=True, null=True)
 
     def has_avatar(self):
-        return bool(self.avatar_blob)
+        return bool(self.avatar_url)
 
     def __str__(self):
         return f"Profile<{self.user.username}>"

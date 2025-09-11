@@ -97,22 +97,14 @@ class PublicProfileSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         request = self.context.get("request")
-        if not request:
-            return None
-        
-        if obj and hasattr(obj, "has_avatar") and obj.has_avatar() and request:
-            return request.build_absolute_uri(
-                f"/api/profile/{obj.user.username}/avatar/"
-            )
+        if request and obj and obj.has_avatar():
+            return request.build_absolute_uri(f"/api/profile/{obj.user.username}/avatar/")
         return None
 
 
 # -------------------------------
 # Profile Serializer (Owner)
 # -------------------------------
-MAX_AVATAR_SIZE = 2 * 1024 * 1024
-ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"]
-
 class ProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", required=False)
     full_name = serializers.CharField(source="user.full_name", required=False)
@@ -123,17 +115,15 @@ class ProfileSerializer(serializers.ModelSerializer):
     dob = serializers.DateField(required=False, allow_null=True)
     achievements = serializers.CharField(required=False, allow_blank=True)
 
-    avatar = serializers.ImageField(write_only=True, required=False, allow_null=True)
-    avatar_base64 = serializers.CharField(write_only=True, required=False, allow_null=True)
     avatar_url = serializers.SerializerMethodField(read_only=True)
 
     experiences = ExperienceSerializer(many=True, read_only=True)
     educations = EducationSerializer(many=True, read_only=True)
     skills = SkillSerializer(many=True, read_only=True)
     links = LinkSerializer(many=True, read_only=True)
-    social_links = SocialLinkSerializer(many=True, read_only=True)  # ✅
-    projects = ProjectSerializer(many=True, read_only=True)         # ✅
-    certificates = CertificateSerializer(many=True, read_only=True) # ✅
+    social_links = SocialLinkSerializer(many=True, read_only=True)
+    projects = ProjectSerializer(many=True, read_only=True)
+    certificates = CertificateSerializer(many=True, read_only=True)
 
     class Meta:
         model = Profile
@@ -141,7 +131,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "username", "full_name", "email", "secondary_email",
             "batch", "is_current_student", "dob", "location", "headline", "about",
             "achievements", "experiences", "educations", "skills", "links", "social_links",
-            "projects", "certificates", "avatar", "avatar_base64", "avatar_url", "updated_at"
+            "projects", "certificates", "avatar_url", "updated_at"
         ]
         read_only_fields = ["updated_at"]
 
@@ -150,35 +140,6 @@ class ProfileSerializer(serializers.ModelSerializer):
         if request and obj and obj.has_avatar():
             return request.build_absolute_uri(f"/api/profile/{obj.user.username}/avatar/")
         return None
-
-
-    def validate(self, data):
-        avatar_file = data.get("avatar")
-        avatar_b64 = data.get("avatar_base64")
-
-        if avatar_file:
-            ct = getattr(avatar_file, "content_type", None)
-            size = getattr(avatar_file, "size", 0)
-            if ct not in ALLOWED_AVATAR_TYPES:
-                raise serializers.ValidationError({"avatar": "Unsupported file type."})
-            if size > MAX_AVATAR_SIZE:
-                raise serializers.ValidationError({"avatar": "Avatar too large (max 2MB)."})
-        elif avatar_b64:
-            try:
-                if avatar_b64.startswith("data:"):
-                    header, b64data = avatar_b64.split(",", 1)
-                    content_type = header.split(";")[0].split(":")[1]
-                else:
-                    b64data = avatar_b64
-                    content_type = None
-                decoded = base64.b64decode(b64data)
-                if len(decoded) > MAX_AVATAR_SIZE:
-                    raise serializers.ValidationError({"avatar_base64": "Avatar too large (max 2MB)."})
-                if content_type and content_type not in ALLOWED_AVATAR_TYPES:
-                    raise serializers.ValidationError({"avatar_base64": "Unsupported file type."})
-            except Exception:
-                raise serializers.ValidationError({"avatar_base64": "Invalid base64 image."})
-        return data
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop("user", {})
@@ -195,27 +156,6 @@ class ProfileSerializer(serializers.ModelSerializer):
                 setattr(user, attr, user_data[attr])
         user.save()
 
-        avatar_file = validated_data.pop("avatar", None)
-        avatar_b64 = validated_data.pop("avatar_base64", None)
-
-        if avatar_file:
-            instance.avatar_blob = avatar_file.read()
-            instance.avatar_content_type = avatar_file.content_type
-            instance.avatar_filename = avatar_file.name
-            instance.avatar_size = avatar_file.size
-        elif avatar_b64:
-            if avatar_b64.startswith("data:"):
-                header, b64data = avatar_b64.split(",", 1)
-                content_type = header.split(";")[0].split(":")[1]
-            else:
-                b64data = avatar_b64
-                content_type = None
-            decoded = base64.b64decode(b64data)
-            instance.avatar_blob = decoded
-            instance.avatar_content_type = content_type
-            instance.avatar_filename = "avatar_b64_upload"
-            instance.avatar_size = len(decoded)
-
         return super().update(instance, validated_data)
 
 # -------------------------------
@@ -227,12 +167,4 @@ class MeProfileSerializer(ProfileSerializer):
         fields = ProfileSerializer.Meta.fields
         read_only_fields = ["updated_at"]
 
-# -------------------------------
-# Avatar
-# -------------------------------
-class AvatarSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Profile
-        fields = ["avatar_blob", "avatar_content_type", "avatar_filename", "avatar_size"]
-        read_only_fields = ["avatar_content_type", "avatar_filename", "avatar_size"]
 
