@@ -9,7 +9,7 @@ from .tasks import (
     # invalidate_post_detail_cache,
 )
 from celery import chain
-from posts.tasks import invalidate_post_cache, warm_posts_list_cache
+
 
 # Run sequentially
 @receiver(post_save, sender=Post)
