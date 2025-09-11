@@ -30,19 +30,34 @@ class PostSerializer(serializers.ModelSerializer):
     tag_names = serializers.SlugRelatedField(
         many=True, read_only=True, slug_field="name", source="tags"
     )
-    author = serializers.CharField(source='author.full_name', read_only=True)
+    author_full_name = serializers.CharField(source='author.full_name', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+    headline = serializers.SerializerMethodField()
+    author_username = serializers.ReadOnlyField(source='author.username')
     slug = serializers.CharField(read_only=True)
     mentions = UserMentionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Post
-        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author','mentions', 'published', 'created_at', 'updated_at']
+        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author_full_name','author_username', 'avatar_url', 'headline','mentions', 'published', 'created_at', 'updated_at']
         read_only_fields = ['slug', 'author', 'created_at', 'updated_at']
 
     def validate(self, data):
         # slug auto-generation handled in model; nothing special required here
         return data
 
+    def get_avatar_url(self, obj):
+        profile = getattr(obj, 'profile', None)
+        if profile and profile.avatar_url:
+            return profile.avatar_url  # directly return the stored URL
+        return None
+    
+    def get_headline(self, obj):
+        profile = getattr(obj, 'profile', None)
+        if profile:
+            return profile.headline
+        return None
+    
     def create(self, validated_data):
         tags_data = validated_data.pop('tags', [])
         user = self.context['request'].user
@@ -158,18 +173,22 @@ class UserSearchSerializer(serializers.ModelSerializer):
     """
     Serializer for representing users in search results.
     """
-    avatar = serializers.SerializerMethodField()
+    # avatar = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
+    headline = serializers.SerializerMethodField()
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'full_name', 'avatar']
+        fields = ['id', 'username', 'full_name', 'avatar_url','headline']
 
-    def get_avatar(self, obj):
+    def get_avatar_url(self, obj):
         profile = getattr(obj, 'profile', None)
-        if profile and profile.avatar_blob:
-            # return f"data:{profile.avatar_content_type};base64,{base64.b64encode(profile.avatar_blob).decode()}"
-            return self.context["request"].build_absolute_uri(
-                reverse("profile-avatar", args=[obj.id])
-            )
+        if profile and profile.avatar_url:
+            return profile.avatar_url  # directly return the stored URL
+        return None
+    def get_headline(self, obj):
+        profile = getattr(obj, 'profile', None)
+        if profile and profile.headline:
+            return profile.headline  
         return None
 class PostSearchSerializer(serializers.ModelSerializer):
     """
