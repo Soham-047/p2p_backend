@@ -31,7 +31,7 @@ def warm_post_detail_cache(self, slug: str):
         log.exception("warm_post_detail_cache failed")
         raise self.retry(exc=exc)
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=5)
+@shared_task(max_retries=3, default_retry_delay=5)
 def warm_posts_list_cache(self):
     try:
         payload = []
