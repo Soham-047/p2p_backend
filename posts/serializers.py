@@ -47,13 +47,13 @@ class PostSerializer(serializers.ModelSerializer):
         return data
 
     def get_avatar_url(self, obj):
-        profile = getattr(obj, 'profile', None)
+        profile = getattr(obj.author, 'profile', None)
         if profile and profile.avatar_url:
             return profile.avatar_url  # directly return the stored URL
         return None
     
     def get_headline(self, obj):
-        profile = getattr(obj, 'profile', None)
+        profile = getattr(obj.author, 'profile', None)
         if profile:
             return profile.headline
         return None

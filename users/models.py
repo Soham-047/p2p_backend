@@ -41,7 +41,7 @@ class Profile(models.Model):
     # avatar_filename = models.CharField(max_length=255, blank=True, null=True)
     # avatar_size = models.PositiveIntegerField(blank=True, null=True)
     avatar_url = models.CharField(max_length=255, blank=True, null=True)
-
+    banner_img_url = models.CharField(max_length=255, blank=True, null=True)
     def has_avatar(self):
         return bool(self.avatar_url)
 
