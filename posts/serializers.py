@@ -3,7 +3,7 @@ from rest_framework import serializers
 from .models import Post, Comment, Tag
 from users.models import CustomUser
 from django.utils.text import slugify
-
+import re
 
 class UserMentionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -24,7 +24,7 @@ class TagSerializer(serializers.ModelSerializer):
                 counter += 1
             data["slug"] = unique_slug
         return data
-import re
+
 class PostSerializer(serializers.ModelSerializer):
     tags = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
     tag_names = serializers.SlugRelatedField(
@@ -98,21 +98,53 @@ class PostSerializer(serializers.ModelSerializer):
         return instance
 
 class CommentSerializer(serializers.ModelSerializer):
-    # author = serializers.CharField(source='author.full_name', read_only=True)
-    author = serializers.SerializerMethodField()
+    author_full_name = serializers.CharField(source='author.full_name', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+    headline = serializers.SerializerMethodField()
+    author_username = serializers.ReadOnlyField(source='author.username')
     post = serializers.PrimaryKeyRelatedField(queryset=Post.objects.all(), required=True)
     mentions = UserMentionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Comment
-        fields = "__all__"
-        read_only_fields = ["slug", "author", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "author_username",
+            "author_full_name",
+            "avatar_url",
+            "headline",
+            "post",
+            "mentions",
+            "content",
+            "created_at",
+            "updated_at",
+            "is_active",
+            "slug",
+            "parent",
+            "likes",
+        ]
+        read_only_fields = [
+            "slug",
+            "avatar_url",
+            "author_full_name",
+            "author_username",
+            "headline",
+            "created_at",
+            "updated_at",
+        ]
 
-    def get_author(self, obj):
-        if obj.author and hasattr(obj.author, 'full_name'):
-            return obj.author.full_name
+    def get_avatar_url(self, obj):
+        profile = getattr(obj.author, "profile", None)
+        if profile and profile.avatar_url:
+            return profile.avatar_url
         return None
-    
+
+    def get_headline(self, obj):
+        profile = getattr(obj.author, "profile", None)
+        if profile:
+            return profile.headline
+        return None
+
     def create(self, validated_data):
         comment = Comment.objects.create(**validated_data)
         mentioned_usernames = re.findall(r'@(\w+)', validated_data['content'])
@@ -122,6 +154,7 @@ class CommentSerializer(serializers.ModelSerializer):
         else:
             comment.mentions.clear()
         return comment
+
 
 class CommentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -144,14 +177,57 @@ class CommentUpdateSerializer(serializers.ModelSerializer):
 
         return instance
 
+# import re
+# from rest_framework import serializers
+
 class ReplySerializer(serializers.ModelSerializer):
-    author = serializers.CharField(source="author.full_name", read_only=True)
-    parent_author = serializers.CharField(source="parent.author.full_name", read_only=True)
+    author_username = serializers.ReadOnlyField(source="author.username")
+    author_full_name = serializers.CharField(source="author.full_name", read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+    headline = serializers.SerializerMethodField()
+    parent_author_full_name = serializers.CharField(source="parent.author.full_name", read_only=True)
+    parent_author_username = serializers.ReadOnlyField(source="parent.author.username")
 
     class Meta:
         model = Comment
-        fields = ["slug", "content", "author", "parent_author", "post", "created_at", "updated_at"]
-        read_only_fields = ["slug", "author", "parent", "post", "created_at", "updated_at"]
+        fields = [
+            "slug",
+            "content",
+            "author_username",
+            "author_full_name",
+            "avatar_url",
+            "headline",
+            "parent_author_full_name",
+            "parent_author_username",
+            "post",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "slug",
+            "author_username",
+            "author_full_name",
+            "avatar_url",
+            "headline",
+            "parent_author_full_name",
+            "parent_author_username",
+            "parent",
+            "post",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_avatar_url(self, obj):
+        profile = getattr(obj.author, "profile", None)
+        if profile and profile.avatar_url:
+            return profile.avatar_url
+        return None
+
+    def get_headline(self, obj):
+        profile = getattr(obj.author, "profile", None)
+        if profile:
+            return profile.headline
+        return None
 
     def create(self, validated_data):
         parent_comment = self.context["parent_comment"]
@@ -161,8 +237,17 @@ class ReplySerializer(serializers.ModelSerializer):
             author=self.context["request"].user,
             content=validated_data["content"],
         )
-        print(parent_comment.author.full_name)
+
+        # 🔎 mention detection
+        mentioned_usernames = re.findall(r'@(\w+)', validated_data["content"])
+        if mentioned_usernames:
+            mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
+            reply.mentions.set(mentioned_users)
+        else:
+            reply.mentions.clear()
+
         return reply
+
 
 # search/serializers.py
 
