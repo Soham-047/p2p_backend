@@ -90,3 +90,36 @@ class Comment(models.Model):
             self.mentions.set(mentioned_user)
         else:
             self.mentions.clear()
+
+
+class Media(models.Model):
+    """
+    Represents a single media item (image or video) linked to a post.
+    """
+    MEDIA_TYPE_CHOICES = [
+        ('image', 'Image'),
+        ('video', 'Video'),
+    ]
+
+    # Foreign Key to the Post model.
+    # If a Post is deleted, all its associated media will be deleted too (CASCADE).
+    # `related_name` lets you access media from a post instance, e.g., `my_post.media_items.all()`
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='media_items')
+    
+    # The URL provided by Cloudinary
+    url = models.URLField(max_length=500)
+    
+    # To differentiate between images and videos
+    media_type = models.CharField(max_length=10, choices=MEDIA_TYPE_CHOICES)
+    
+    # An integer to maintain the order of media items in a post (e.g., 1, 2, 3...)
+    display_order = models.PositiveIntegerField(default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Default ordering to ensure media is retrieved in the correct sequence
+        ordering = ['display_order']
+
+    def __str__(self):
+        return f"{self.get_media_type_display()} for post: {self.post.title} by {self.post.author} has slug {self.post.slug}"
