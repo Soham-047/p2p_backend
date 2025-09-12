@@ -84,7 +84,7 @@ class PostListCreateView(APIView):
         
         # --- THIS IS THE FIX ---
         # Optimize the queryset BEFORE it goes to the serializer
-        posts = Post.objects.select_related("author").prefetch_related("tags", "mentions").all()
+        posts = Post.objects.select_related("author").prefetch_related("tags", "mentions", "media_items").all()
         # ----------------------
         
         serializer = PostSerializer(posts, many=True)

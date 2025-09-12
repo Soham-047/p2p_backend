@@ -1,6 +1,6 @@
 # posts/serializers.py
 from rest_framework import serializers
-from .models import Post, Comment, Tag
+from .models import Post, Comment, Tag, Media
 from users.models import CustomUser
 from django.utils.text import slugify
 import re
@@ -25,67 +25,102 @@ class TagSerializer(serializers.ModelSerializer):
             data["slug"] = unique_slug
         return data
 
+class MediaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Media
+        fields = ['url', 'media_type', 'display_order']
+
+
 class PostSerializer(serializers.ModelSerializer):
-    tags = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
+    # --- For READING data (output) ---
+    author_full_name = serializers.CharField(source='author.full_name', read_only=True)
+    author_username = serializers.ReadOnlyField(source='author.username')
+    avatar_url = serializers.SerializerMethodField()
+    headline = serializers.SerializerMethodField()
+    slug = serializers.CharField(read_only=True)
+    mentions = UserMentionSerializer(many=True, read_only=True)
     tag_names = serializers.SlugRelatedField(
         many=True, read_only=True, slug_field="name", source="tags"
     )
-    author_full_name = serializers.CharField(source='author.full_name', read_only=True)
-    avatar_url = serializers.SerializerMethodField()
-    headline = serializers.SerializerMethodField()
-    author_username = serializers.ReadOnlyField(source='author.username')
-    slug = serializers.CharField(read_only=True)
-    mentions = UserMentionSerializer(many=True, read_only=True)
+    # The 'source' argument has been removed from this line.
+    media_items = MediaSerializer(many=True, read_only=True)
+
+    # --- For WRITING data (input) ---
+    tags = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
+    )
+    media_data = serializers.ListField(
+        child=serializers.DictField(), required=False, write_only=True
+    )
 
     class Meta:
         model = Post
-        fields = ['title', 'content', 'slug', "tags", 'tag_names', 'author_full_name','author_username', 'avatar_url', 'headline','mentions', 'published', 'created_at', 'updated_at']
-        read_only_fields = ['slug', 'author', 'created_at', 'updated_at']
-
-    def validate(self, data):
-        # slug auto-generation handled in model; nothing special required here
-        return data
+        fields = [
+            'id', 'title', 'slug', 'content', 'published', 'created_at', 'updated_at',
+            'author_full_name', 'author_username', 'avatar_url', 'headline',
+            'mentions', 'tag_names', 'tags', 'media_items', 'media_data'
+        ]
+        read_only_fields = ['author']
 
     def get_avatar_url(self, obj):
         profile = getattr(obj.author, 'profile', None)
         if profile and profile.avatar_url:
-            return profile.avatar_url  # directly return the stored URL
+            return profile.avatar_url
         return None
-    
+
     def get_headline(self, obj):
         profile = getattr(obj.author, 'profile', None)
         if profile:
             return profile.headline
         return None
-    
+
     def create(self, validated_data):
-        tags_data = validated_data.pop('tags', [])
         user = self.context['request'].user
+        tags_data = validated_data.pop('tags', [])
+        media_data = validated_data.pop('media_data', [])
+        
         post = Post.objects.create(author=user, **validated_data)
 
         for tag_name in tags_data:
             tag, _ = Tag.objects.get_or_create(name=tag_name)
             post.tags.add(tag)
-
+        
+        for index, media_item in enumerate(media_data):
+            Media.objects.create(
+                post=post,
+                url=media_item.get('url'),
+                media_type=media_item.get('media_type'),
+                display_order=index
+            )
+        
         mentioned_usernames = re.findall(r'@(\w+)', validated_data['content'])
         if mentioned_usernames:
             mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
             post.mentions.set(mentioned_users)
-        else:
-            post.mentions.clear()
+        
         return post
 
     def update(self, instance, validated_data):
         tags_data = validated_data.pop('tags', None)
-        for attr, val in validated_data.items():
-            setattr(instance, attr, val)
-        instance.save()
+        media_data = validated_data.pop('media_data', None)
+
+        instance = super().update(instance, validated_data)
 
         if tags_data is not None:
             instance.tags.clear()
             for tag_name in tags_data:
                 tag, _ = Tag.objects.get_or_create(name=tag_name)
                 instance.tags.add(tag)
+
+        if media_data is not None:
+            instance.media_items.all().delete()
+            for index, media_item in enumerate(media_data):
+                Media.objects.create(
+                    post=instance,
+                    url=media_item.get('url'),
+                    media_type=media_item.get('media_type'),
+                    display_order=index
+                )
 
         content = validated_data.get('content', instance.content)
         mentioned_usernames = re.findall(r'@(\w+)', content)
@@ -299,3 +334,5 @@ class LikeCountCommentSerializer(serializers.Serializer):
 #     class Meta:
 #         model = Tag
 #         fields = ['name']
+
+

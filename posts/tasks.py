@@ -108,69 +108,112 @@ from .cache import (
 from .serializers import PostSerializer
 log = logging.getLogger(__name__)
 
+# @shared_task(bind=True, max_retries=3, default_retry_delay=5)
+# def warm_post_detail_cache(self, slug: str,*args, **kwargs):
+#     try:
+#         post = Post.objects.select_related("author").prefetch_related("tags", "likes","mentions","media_items").get(slug=slug)
+#         # data = {
+#         #     "title": post.title,
+#         #     "content": post.content,
+#         #     "slug": post.slug,
+#         #     "tags": [t.name for t in post.tags.all()],
+#         #     "likes_count": post.likes.count(),
+#         #     "author_id": post.author_id,
+#         # }
+#         serializer = PostSerializer(post)
+#         cache_set(key_post_detail(slug), serializer.data, POSTS_TTL)
+#         return True
+#     except Post.DoesNotExist:
+#         cache_delete(key_post_detail(slug))
+#         return False
+#     except Exception as exc:
+#         log.exception("warm_post_detail_cache failed")
+#         raise self.retry(exc=exc)
+
+# # @shared_task(bind=True, max_retries=3, default_retry_delay=5)
+# # def warm_posts_list_cache(self):
+# #     try:
+# #         payload = []
+# #         # qs = Post.objects.select_related("author").prefetch_related("tags").order_by("-created_at")[:200]
+# #         # for p in qs:
+# #         #     payload.append({
+# #         #         "title": p.title,
+# #         #         "content": p.content,
+# #         #         "slug": p.slug,
+# #         #         "tags": [t.name for t in p.tags.all()],
+# #         #     })
+# #         # cache_set(key_posts_list(), payload, timeout=None)
+
+
+# #         # print("List is caches")
+# #         # cache_set(key_posts_list(), payload, POSTS_TTL)
+# #         log.info(f"List is cached. {len(payload)} posts were updated.{cache.get(key_posts_list())}")
+# #         return len(payload)
+# #     except Exception as exc:
+# #         log.exception("warm_posts_list_cache failed")
+# #         raise self.retry(exc=exc)
+
+# @shared_task(bind=True, max_retries=3, default_retry_delay=5)
+# def warm_posts_list_cache(self,*args, **kwargs):
+#     try:
+#         from django.core.cache import cache
+#         log.info(f"Cache connection (worker): {cache.client.get_client().connection_pool.connection_kwargs}")
+#         log.info(f"VERIFYING TIMEOUT: The default timeout loaded by this worker is: {cache.default_timeout}")
+#         qs = Post.objects.select_related("author").prefetch_related("tags", "mentions","media_items").order_by("-created_at")[:200]
+#         serializer = PostSerializer(qs, many=True)
+#         # cache_set(key_posts_list(), serializer.data, timeout=None)
+#         cache_set(key_posts_list(), serializer.data, POSTS_TTL)  
+
+#         log.info(f"List is cached. {len(serializer.data)} posts were updated.{key_posts_list()}")
+#         return len(serializer.data)
+#     except Exception as exc:
+#         log.exception("warm_posts_list_cache failed")
+#         raise self.retry(exc=exc)
+from django.test import RequestFactory
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
-def warm_post_detail_cache(self, slug: str,*args, **kwargs):
+def warm_post_detail_cache(self, slug: str, *args, **kwargs):
     try:
-        post = Post.objects.select_related("author").prefetch_related("tags", "likes").get(slug=slug)
-        # data = {
-        #     "title": post.title,
-        #     "content": post.content,
-        #     "slug": post.slug,
-        #     "tags": [t.name for t in post.tags.all()],
-        #     "likes_count": post.likes.count(),
-        #     "author_id": post.author_id,
-        # }
-        serializer = PostSerializer(post)
+        post = Post.objects.select_related("author").prefetch_related(
+            "tags", "likes", "mentions", "media_items"
+        ).get(slug=slug)
+
+        # FIX: Create and provide the request context
+        factory = RequestFactory()
+        request = factory.get('/')
+        serializer = PostSerializer(post, context={'request': request})
+
         cache_set(key_post_detail(slug), serializer.data, POSTS_TTL)
+        log.info(f"Warmed cache for post detail: {slug}")
         return True
     except Post.DoesNotExist:
         cache_delete(key_post_detail(slug))
         return False
     except Exception as exc:
-        log.exception("warm_post_detail_cache failed")
+        log.exception(f"warm_post_detail_cache failed for slug: {slug}")
+        # FIX: Corrected typo from self.Retry to self.retry
         raise self.retry(exc=exc)
 
-# @shared_task(bind=True, max_retries=3, default_retry_delay=5)
-# def warm_posts_list_cache(self):
-#     try:
-#         payload = []
-#         # qs = Post.objects.select_related("author").prefetch_related("tags").order_by("-created_at")[:200]
-#         # for p in qs:
-#         #     payload.append({
-#         #         "title": p.title,
-#         #         "content": p.content,
-#         #         "slug": p.slug,
-#         #         "tags": [t.name for t in p.tags.all()],
-#         #     })
-#         # cache_set(key_posts_list(), payload, timeout=None)
-
-
-#         # print("List is caches")
-#         # cache_set(key_posts_list(), payload, POSTS_TTL)
-#         log.info(f"List is cached. {len(payload)} posts were updated.{cache.get(key_posts_list())}")
-#         return len(payload)
-#     except Exception as exc:
-#         log.exception("warm_posts_list_cache failed")
-#         raise self.retry(exc=exc)
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
-def warm_posts_list_cache(self,*args, **kwargs):
+def warm_posts_list_cache(self, *args, **kwargs):
     try:
-        from django.core.cache import cache
-        log.info(f"Cache connection (worker): {cache.client.get_client().connection_pool.connection_kwargs}")
-        log.info(f"VERIFYING TIMEOUT: The default timeout loaded by this worker is: {cache.default_timeout}")
-        qs = Post.objects.select_related("author").prefetch_related("tags", "mentions").order_by("-created_at")[:200]
-        serializer = PostSerializer(qs, many=True)
-        # cache_set(key_posts_list(), serializer.data, timeout=None)
-        cache_set(key_posts_list(), serializer.data, POSTS_TTL)  
+        qs = Post.objects.select_related("author").prefetch_related(
+            "tags", "mentions", "media_items"
+        ).order_by("-created_at")[:200]
 
-        log.info(f"List is cached. {len(serializer.data)} posts were updated.{key_posts_list()}")
+        # FIX: Create and provide the request context
+        factory = RequestFactory()
+        request = factory.get('/')
+        serializer = PostSerializer(qs, many=True, context={'request': request})
+        
+        cache_set(key_posts_list(), serializer.data, POSTS_TTL)
+
+        log.info(f"List is cached. {len(serializer.data)} posts were updated.")
         return len(serializer.data)
     except Exception as exc:
         log.exception("warm_posts_list_cache failed")
+        # FIX: Corrected typo from self.Retry to self.retry
         raise self.retry(exc=exc)
-
-
 
 @shared_task
 def invalidate_post_cache(slug: str):
