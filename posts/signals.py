@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 from .models import Post, Comment
+
 from .tasks import (
     invalidate_post_cache,
     warm_posts_list_cache,
@@ -79,3 +80,60 @@ def post_tags_changed(sender, instance: Post, action, **kwargs):
 
 
 
+# In your signals.py file
+ # Add CustomUser if needed
+
+# ... other receivers for Post model ...
+
+@receiver(m2m_changed, sender=Post.likes.through)
+def post_likes_changed(sender, instance, action, **kwargs):
+    """
+    When a user likes or unlikes a post:
+    - Invalidate the cache for the main list and the post detail.
+    - Trigger tasks to re-warm both caches with the new like_count.
+    """
+    # We only care when a like is added or removed.
+    if action in {"post_add", "post_remove"}:
+        # 'instance' here is the Post that was liked/unliked.
+        slug = instance.slug
+        
+        # Invalidate first to remove stale data
+        invalidate_post_cache.delay(slug)
+        
+        # Then, re-warm the caches with fresh data in the background
+        warm_posts_list_cache.delay()
+        warm_post_detail_cache.delay(slug)
+
+
+# In your signals.py file
+
+@receiver(post_save, sender=Comment)
+def comment_saved(sender, instance, created, **kwargs):
+    """
+    When a new comment is created:
+    - Invalidate the cache for the main list and the parent post.
+    - Trigger tasks to re-warm both caches with the new comment_count.
+    """
+    # We only care about newly created comments.
+    if created:
+        # 'instance' here is the Comment. We need its parent post's slug.
+        slug = instance.post.slug
+        
+        # Invalidate and re-warm
+        invalidate_post_cache.delay(slug)
+        warm_posts_list_cache.delay()
+        warm_post_detail_cache.delay(slug)
+
+@receiver(post_delete, sender=Comment)
+def comment_deleted(sender, instance, **kwargs):
+    """
+    When a comment is deleted:
+    - Invalidate the cache for the main list and the parent post.
+    - Trigger tasks to re-warm both caches with the new comment_count.
+    """
+    slug = instance.post.slug
+    
+    # Invalidate and re-warm
+    invalidate_post_cache.delay(slug)
+    warm_posts_list_cache.delay()
+    warm_post_detail_cache.delay(slug)

@@ -35,6 +35,11 @@ class Post(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+        indexes = [
+            models.Index(fields=['-created_at']),  # The '-' matches your ordering direction
+            models.Index(fields=['published']),
+        ]
+
     def __str__(self):
         return f"{self.title} by {self.author}"
     
@@ -57,7 +62,7 @@ class Post(models.Model):
             self.mentions.clear()
 
 class Comment(models.Model):
-    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
     author = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -68,6 +73,13 @@ class Comment(models.Model):
     slug = models.SlugField(blank=True,unique=True)
     mentions = models.ManyToManyField(CustomUser, related_name='mentioned_comments', blank=True)
     
+    class Meta:
+        # This tells the database to index comments primarily by the post they belong to,
+        # and secondarily by their creation date.
+        indexes = [
+            models.Index(fields=['post', '-created_at']),
+        ]
+        
     def __str__(self):
         return f"Comment by {self.author} on {self.post}"
     
