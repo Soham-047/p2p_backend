@@ -205,12 +205,16 @@ def warm_posts_list_cache(self, *args, **kwargs):
         #     "tags", "mentions", "media_items"
         # ).order_by("-created_at")[:200]
 
-        qs = Post.objects.select_related("author").prefetch_related(
-            "tags", "mentions", "media_items"
-        ).annotate(
-            comment_count=Count('comments', distinct=True),likes_count=Count('likes', distinct=True)
-        ).order_by("-created_at")[:200]
+        # qs = Post.objects.select_related("author").prefetch_related(
+        #     "tags", "mentions", "media_items"
+        # ).annotate(
+        #     comment_count=Count('comments', distinct=True),likes_count=Count('likes', distinct=True)
+        # ).order_by("-created_at")[:200]
 
+        qs = Post.objects.select_related("author") \
+        .prefetch_related("tags", "mentions", "media_items") \
+        .annotate(comment_count=Count('comments', distinct=True),
+        likes_count=Count('likes', distinct=True)).order_by("-created_at")[:200]
 
         # FIX: Create and provide the request context
         factory = RequestFactory()
