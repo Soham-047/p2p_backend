@@ -27,6 +27,7 @@ from django.core.cache import cache
 from .cache import *
 import logging
 import time
+from django.db.models import Count
 log = logging.getLogger(__name__)
 
 
@@ -71,6 +72,7 @@ class PostListCreateView(APIView):
 
     # p2p_backend/posts/views.py
 
+   
     def get(self, request):
         cache_key = key_posts_list()
         print("cache_key", cache_key)
@@ -84,7 +86,11 @@ class PostListCreateView(APIView):
         
         # --- THIS IS THE FIX ---
         # Optimize the queryset BEFORE it goes to the serializer
-        posts = Post.objects.select_related("author").prefetch_related("tags", "mentions", "media_items").all()
+        # posts = Post.objects.select_related("author").prefetch_related("tags", "mentions", "media_items").all()
+        posts = Post.objects.select_related("author") \
+        .prefetch_related("tags", "mentions", "media_items") \
+        .annotate(comment_count=Count('comments', distinct=True),
+        likes_count=Count('likes', distinct=True)).order_by("-created_at")[:200]
         # ----------------------
         
         serializer = PostSerializer(posts, many=True)
@@ -159,7 +165,13 @@ class PostDetailView(APIView):
 
         print("Serving post detail from DATABASE.") # For debugging
         try:
-            post = Post.objects.get(slug=slug)
+            post = Post.objects.select_related("author").prefetch_related(
+                "tags", "likes", "mentions", "media_items"
+            ).annotate(
+                comment_count=Count('comments', distinct=True),
+                likes_count=Count('likes', distinct=True)
+            ).get(slug=slug)
+            
         except Post.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = PostSerializer(post)
@@ -759,3 +771,90 @@ class TagSearchAPIView(APIView):
         post = Post.objects.filter(tags__name__icontains=tag_name)
         serializer = PostSerializer(post, many=True)
         return Response(serializer.data)
+
+
+
+
+class PostLikeStatusView(APIView):
+    """
+    Accepts a POST request with a list of post slugs in the payload
+    and returns a dictionary of their like status for the current user.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Get Like Status for Multiple Posts",
+        description="""
+        Provide a list of post slugs in the request body to check which of those posts
+        the currently authenticated user has liked.
+        """,
+        # Define the request body format
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "post_slugs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    }
+                },
+            }
+        },
+        # Define the possible responses
+        responses={
+            200: OpenApiExample(
+                "Example Success Response",
+                summary="Successful response",
+                description="Returns a map of post slugs to a boolean indicating if the user has liked the post.",
+                value={
+                    "my-first-post": True,
+                    "a-post-about-django": False,
+                    "another-awesome-post": True
+                }
+            ),
+            400: {"description": "Bad Request: 'post_slugs' must be a list."},
+            401: {"description": "Unauthorized: Authentication credentials were not provided."},
+        },
+        # Add examples for clarity
+        examples=[
+            OpenApiExample(
+                "Example Request Payload",
+                summary="A sample request",
+                description="A valid JSON payload containing a list of post slugs.",
+                value={
+                    "post_slugs": [
+                        "my-first-post",
+                        "a-post-about-django",
+                        "another-awesome-post"
+                    ]
+                },
+                request_only=True,
+            ),
+        ],
+        tags=["Posts", "Likes"] # Group under 'Posts' and 'Likes' tags
+    )
+    def post(self, request):
+        # 1. Get the list of slugs from the request payload
+        post_slugs = request.data.get('post_slugs', [])
+
+        if not isinstance(post_slugs, list):
+            return Response(
+                {"error": "post_slugs must be a list."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not post_slugs:
+            return Response({})
+
+        # 2. Filter by 'slug__in' and get back a set of slugs the user has liked
+        liked_post_slugs = set(
+            request.user.liked_posts.filter(slug__in=post_slugs).values_list('slug', flat=True)
+        )
+
+        # 3. Build the response dictionary with slugs as keys
+        response_data = {
+            slug: (slug in liked_post_slugs)
+            for slug in post_slugs
+        }
+
+        return Response(response_data)

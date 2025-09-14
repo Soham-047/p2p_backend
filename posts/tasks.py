@@ -170,12 +170,16 @@ log = logging.getLogger(__name__)
 #         log.exception("warm_posts_list_cache failed")
 #         raise self.retry(exc=exc)
 from django.test import RequestFactory
+from django.db.models import Count
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
 def warm_post_detail_cache(self, slug: str, *args, **kwargs):
     try:
         post = Post.objects.select_related("author").prefetch_related(
-            "tags", "likes", "mentions", "media_items"
-        ).get(slug=slug)
+                    "tags", "likes", "mentions", "media_items"
+                ).annotate(
+                    comment_count=Count('comments', distinct=True),
+                    likes_count=Count('likes', distinct=True)
+                ).get(slug=slug)
 
         # FIX: Create and provide the request context
         factory = RequestFactory()
@@ -197,9 +201,16 @@ def warm_post_detail_cache(self, slug: str, *args, **kwargs):
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
 def warm_posts_list_cache(self, *args, **kwargs):
     try:
+        # qs = Post.objects.select_related("author").prefetch_related(
+        #     "tags", "mentions", "media_items"
+        # ).order_by("-created_at")[:200]
+
         qs = Post.objects.select_related("author").prefetch_related(
             "tags", "mentions", "media_items"
+        ).annotate(
+            comment_count=Count('comments', distinct=True),likes_count=Count('likes', distinct=True)
         ).order_by("-created_at")[:200]
+
 
         # FIX: Create and provide the request context
         factory = RequestFactory()
