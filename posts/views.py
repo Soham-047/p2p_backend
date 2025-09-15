@@ -1013,3 +1013,71 @@ class ListMyPosts(APIView):
 
         # 5. Return the paginator's formatted response
         return paginator.get_paginated_response(serializer.data)
+    
+
+
+class ListUserPostsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="List a User's Posts", # <-- UPDATED
+        description="Retrieves a paginated list of posts created by a specific user.", # <-- UPDATED
+        tags=["Posts"],
+        parameters=[
+            # ✅ ADDED: New path parameter for the username
+            OpenApiParameter(
+                name="username",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                required=True,
+                description="The username of the user whose posts are to be retrieved.",
+            ),
+            OpenApiParameter(
+                name="page",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="A page number within the paginated result set.",
+            ),
+        ],
+        responses={
+            200: PostSerializer(many=True),
+            401: {"description": "Authentication credentials were not provided."},
+            404: {"description": "User not found."} # <-- ADDED: Document the 404 case
+        }
+        
+    )
+    # ✅ CHANGED: The method now accepts 'username' from the URL
+    def get(self, request, username, *args, **kwargs):
+        
+        # ✅ CHANGED: Look up the target user by username, return 404 if not found
+        target_user = get_object_or_404(User, username=username)
+
+        # 1. Build the fully optimized queryset for the target user
+        queryset = Post.objects.filter(
+            author=target_user # <-- UPDATED to use the user from the URL
+        ).select_related(
+            'author__profile'
+        ).prefetch_related(
+            'tags',
+            'mentions',
+            'media_items'
+        ).annotate(
+            comment_count=Count('comments', distinct=True),
+            likes_count=Count('likes', distinct=True)
+        ).order_by('-created_at')
+
+
+        # --- Pagination Logic (No Changes Needed Here) ---
+
+        # 2. Create an instance of the paginator
+        paginator = PageNumberPagination()
+        
+        # 3. Paginate the queryset
+        paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+
+        # 4. Serialize the paginated queryset
+        serializer = PostSerializer(paginated_queryset, many=True)
+
+        # 5. Return the paginator's formatted response
+        return paginator.get_paginated_response(serializer.data)
