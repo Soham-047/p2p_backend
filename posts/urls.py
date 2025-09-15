@@ -20,9 +20,12 @@ from .views import (
     CommentUpdateView,
     PostLikeStatusView,
     ListMyPosts,
+    ListUserPostsView,
 )
 
 urlpatterns = [
+    #to get the Post of particular user
+    path('posts/<str:username>/posts/', ListUserPostsView.as_view(), name='list-user-posts'),
     #to get the list of my posts 
     path('posts/my-posts/', ListMyPosts.as_view(), name='list-my-posts'),
     #to get the status of liked by me status of list of posts
