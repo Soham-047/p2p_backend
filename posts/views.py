@@ -727,23 +727,63 @@ class SearchView(APIView):
     
 
 
-class UserSearchAPIView(generics.ListAPIView):
+# class UserSearchAPIView(generics.ListAPIView):
+#     permission_classes = [IsAuthenticated]
+#     serializer_class = UserSearchSerializer
+#     queryset = User.objects.all()
+#     filter_backends = [filters.SearchFilter]
+#     search_fields = ['username', 'full_name']
+
+#     @extend_schema(
+#         summary="Search all users",
+#         description="Return a list of all users matched with the search query.",
+#         responses={200: UserSearchSerializer(many=True)},
+#         tags=["Search"],
+#     )
+#     def get(self, request, *args, **kwargs):
+#         return super().get(request, *args, **kwargs)
+   
+class UserSearchAPIView(APIView):
+    """
+    An API view for searching users by username or full name.
+    """
     permission_classes = [IsAuthenticated]
-    serializer_class = UserSearchSerializer
-    queryset = User.objects.all()
-    filter_backends = [filters.SearchFilter]
-    search_fields = ['username', 'full_name']
 
     @extend_schema(
         summary="Search all users",
-        description="Return a list of all users matched with the search query.",
+        description="Return a list of all users matched with the search query. The search is performed on the 'username' and 'full_name' fields.",
         responses={200: UserSearchSerializer(many=True)},
+        # ✅ ADD THIS PART
+        parameters=[
+            OpenApiParameter(
+                name='search',
+                type=str,
+                description='A search term to filter users by username or full name.',
+                required=False
+            )
+        ],
         tags=["Search"],
     )
     def get(self, request, *args, **kwargs):
-        return super().get(request, *args, **kwargs)
-   
+        # 1. Get the search term from the query parameters.
+        #    The key 'search' is the default for DRF's SearchFilter.
+        query = self.request.query_params.get('search', None)
 
+        # 2. Start with the base queryset of all users.
+        queryset = User.objects.all()
+
+        # 3. If a search query is provided, filter the queryset.
+        if query:
+            # Use Q objects to create a case-insensitive search across multiple fields with an OR condition.
+            queryset = queryset.filter(
+                Q(username__icontains=query) | Q(full_name__icontains=query)
+            )
+
+        # 4. Serialize the resulting queryset.
+        serializer = UserSearchSerializer(queryset, many=True)
+
+        # 5. Return the serialized data in the response.
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @extend_schema_view(
