@@ -28,6 +28,7 @@ from .cache import *
 import logging
 import time
 from django.db.models import Count
+from django.utils.dateparse import parse_datetime
 log = logging.getLogger(__name__)
 
 from rest_framework.pagination import PageNumberPagination
@@ -1081,3 +1082,51 @@ class ListUserPostsView(APIView):
 
         # 5. Return the paginator's formatted response
         return paginator.get_paginated_response(serializer.data)
+    
+
+
+POST_PAGE_SIZE = 25
+
+class PostHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="List Older Posts (Paginated)",
+        description="""Retrieves a paginated list of posts.
+        
+        Use the `before_timestamp` query parameter to paginate through older posts.
+        Each request returns a 'page' of posts created before the provided timestamp.""",
+        tags=["Posts"],
+        parameters=[
+            OpenApiParameter(
+                name="before_timestamp",
+                type=OpenApiTypes.DATETIME,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="The ISO 8601 timestamp of the oldest post you have. The API will return posts older than this.",
+            ),
+        ],
+        responses={200: PostSerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        cursor_timestamp_str = request.query_params.get('before_timestamp')
+
+        # Start with the base, optimized queryset
+        queryset = Post.objects.select_related("author") \
+            .prefetch_related("tags", "mentions", "media_items") \
+            .annotate(
+                comment_count=Count('comments', distinct=True),
+                likes_count=Count('likes', distinct=True)
+            ).order_by("-created_at")
+
+        # If a cursor is provided, filter for posts OLDER than it
+        if cursor_timestamp_str:
+            cursor_timestamp = parse_datetime(cursor_timestamp_str)
+            if cursor_timestamp:
+                queryset = queryset.filter(created_at__lt=cursor_timestamp)
+
+        # Fetch the next page of posts from the DATABASE
+        posts = queryset[:POST_PAGE_SIZE]
+
+        serializer = PostSerializer(posts, many=True)
+        return Response(serializer.data)
