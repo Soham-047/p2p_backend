@@ -24,7 +24,7 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 from django.db.models import Q
 from users.tasks import send_registration_email, log_user_activity
-
+from rest_framework import serializers
 User = get_user_model()
 
 
@@ -34,6 +34,9 @@ User = get_user_model()
 class RegistrationAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    
+    
+    
     @extend_schema(
         summary="Register a new student",
         description="Register with a **college email** (must end with `@iiitbh.ac.in`). "
