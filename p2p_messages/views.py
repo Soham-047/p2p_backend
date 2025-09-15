@@ -920,3 +920,101 @@ def mark_read(request):
     other_id = int(request.data.get("other_user_id"))
     r().hdel(unread_key(request.user.id), str(other_id))
     return Response({"ok": True})
+
+
+
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, OpenApiExample
+
+CHAT_PAGE_SIZE = 50
+
+class OldChatHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Get Chat History",
+        description="...",
+        tags=["Chat"],
+        parameters=[
+            OpenApiParameter(
+                name="username",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                required=True,
+            ),
+            # ✅ REMOVE 'example' from here
+            OpenApiParameter(
+                name="before_timestamp",
+                type=OpenApiTypes.DATETIME,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="The ISO 8601 timestamp of the oldest message you have.",
+            ),
+        ],
+        # ✅ ADD the 'examples' block here instead
+        examples=[
+            OpenApiExample(
+                'Example 1: First page of history',
+                summary='No cursor provided',
+                description='When no timestamp is provided, you get the most recent page of historical messages.',
+                value={} # No query params
+            ),
+            OpenApiExample(
+                'Example 2: Paginate older messages',
+                summary='Using a timestamp cursor',
+                description='Provide the timestamp of the oldest message you have to get the next page.',
+                value={'before_timestamp': '2025-09-15T10:30:00Z'}
+            )
+        ],
+        responses={
+            200: MessageSerializer(many=True),
+            404: {"description": "User not found."}
+        }
+    )
+    
+
+    # @extend_schema(...) # Your existing schema decorator
+    def get(self, request, username, *args, **kwargs):
+        user1 = request.user
+        user2 = get_object_or_404(User, username=username)
+        cursor_timestamp_str = request.query_params.get('before_timestamp')
+
+        # 1. Fetch encrypted messages from the database
+        queryset = Message.objects.select_related('sender', 'receiver').filter(
+            (Q(sender=user1) & Q(receiver=user2)) |
+            (Q(sender=user2) & Q(receiver=user1))
+        ).order_by('-timestamp')
+
+        if cursor_timestamp_str:
+            cursor_timestamp = parse_datetime(cursor_timestamp_str)
+            if cursor_timestamp:
+                queryset = queryset.filter(timestamp__lt=cursor_timestamp)
+
+        messages = queryset[:CHAT_PAGE_SIZE]
+
+        # 2. Manually decrypt and build the response list, just like in RecentChatsAPIView
+        fernet = Fernet(settings.FERNET_KEY)
+        response_data = []
+        
+        for msg in messages:
+            try:
+                decrypted_text = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
+            except InvalidToken:
+                decrypted_text = "[Message could not be decrypted]"
+            
+            response_data.append({
+                'id': msg.id,
+                'sender': msg.sender.username,
+                'receiver': msg.receiver.username,
+                'message': decrypted_text,  # The decrypted plain text
+                'timestamp': msg.timestamp.isoformat(),
+                # 'is_edited': msg.is_edited,
+            })
+
+        # 3. Return the manually constructed list of decrypted messages
+        return Response(response_data)
+
+
+
+
+
+

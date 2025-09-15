@@ -21,6 +21,7 @@ from .views import (
     PostLikeStatusView,
     ListMyPosts,
     ListUserPostsView,
+    PostHistoryView,
 )
 
 urlpatterns = [
@@ -30,6 +31,8 @@ urlpatterns = [
     path('posts/my-posts/', ListMyPosts.as_view(), name='list-my-posts'),
     #to get the status of liked by me status of list of posts
     path('posts/like-statuses/', PostLikeStatusView.as_view(), name='post-like-statuses'),
+    #list older posts other  than caching
+    path('posts/history/', PostHistoryView.as_view(), name='post-history'),
     # POSTs
     path('posts/', PostListCreateView.as_view(), name='post-list-create'),
     path('posts/<slug:slug>/', PostDetailView.as_view(), name='post-detail'),
