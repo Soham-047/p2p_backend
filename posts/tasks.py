@@ -186,7 +186,8 @@ def warm_post_detail_cache(self, slug: str, *args, **kwargs):
         request = factory.get('/')
         serializer = PostSerializer(post, context={'request': request})
 
-        cache_set(key_post_detail(slug), serializer.data, POSTS_TTL)
+        cache_set(key_post_detail(slug), serializer.data, timeout=None)
+        
         log.info(f"Warmed cache for post detail: {slug}")
         return True
     except Post.DoesNotExist:
@@ -221,7 +222,8 @@ def warm_posts_list_cache(self, *args, **kwargs):
         request = factory.get('/')
         serializer = PostSerializer(qs, many=True, context={'request': request})
         
-        cache_set(key_posts_list(), serializer.data, POSTS_TTL)
+        # cache_set(key_posts_list(), serializer.data, POSTS_TTL)
+        cache_set(key_posts_list(), serializer.data, timeout=None)
 
         log.info(f"List is cached. {len(serializer.data)} posts were updated.")
         return len(serializer.data)

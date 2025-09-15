@@ -19,14 +19,19 @@ from .views import (
     TagSearchAPIView,
     CommentUpdateView,
     PostLikeStatusView,
+    ListMyPosts,
 )
 
 urlpatterns = [
+    #to get the list of my posts 
+    path('posts/my-posts/', ListMyPosts.as_view(), name='list-my-posts'),
     #to get the status of liked by me status of list of posts
     path('posts/like-statuses/', PostLikeStatusView.as_view(), name='post-like-statuses'),
     # POSTs
     path('posts/', PostListCreateView.as_view(), name='post-list-create'),
     path('posts/<slug:slug>/', PostDetailView.as_view(), name='post-detail'),
+
+    
 
     
     # COMMENTS - List & Create for a Post
@@ -78,6 +83,6 @@ urlpatterns = [
     #url to search Tag
     path('tags/search/', TagSearchAPIView.as_view(), name='tag-search'),
 
-
+    
 ]
 
