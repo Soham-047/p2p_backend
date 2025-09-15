@@ -177,6 +177,9 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "user": "60/min",
     },
+    # --- Add these two lines to enable pagination ---
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10, # Sets the default number of items per page
 }
 
 SIMPLE_JWT = {

@@ -30,7 +30,7 @@ import time
 from django.db.models import Count
 log = logging.getLogger(__name__)
 
-
+from rest_framework.pagination import PageNumberPagination
 
 class PostListCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -698,8 +698,8 @@ class SearchView(APIView):
             queryset = User.objects.annotate(
                 similarity=TrigramSimilarity('username', query),
             ).filter(similarity__gt=0.3).order_by('-similarity')
-            serializer = UserSearchSerializer(queryset, many=True)
-            return Response(serializer.data)
+            serializer_class = UserSearchSerializer
+            # return Response(serializer.data)
 
         elif search_type == 'posts':
             queryset = Post.objects.filter(published=True).annotate(
@@ -711,10 +711,19 @@ class SearchView(APIView):
             ).filter(
                 Q(search=query) | Q(similarity__gt=0.3)
             ).order_by('-similarity')
-            serializer = PostSearchSerializer(queryset, many=True)
-            return Response(serializer.data)
+            serializer_class = PostSearchSerializer
+            # return Response(serializer.data)
 
-        return Response({"detail": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."}, status=400)
+        else: 
+            return Response({"detail": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."}, status=400)
+        
+        paginator = PageNumberPagination()
+
+        paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+
+        serializer = serializer_class(paginated_queryset, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
     
 
 
@@ -757,9 +766,12 @@ class UserSearchAPIView(generics.ListAPIView):
         tags=["Search"],
     )
 )
+
+
 class TagSearchAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    serializers_class = TagSerializer
+    # Note: The serializer is defined in the get method, so this class attribute isn't used.
+    # serializer_class = TagSerializer 
 
     def get(self, request, *args, **kwargs):
         tag_name = request.query_params.get("q")
@@ -768,10 +780,31 @@ class TagSearchAPIView(APIView):
                 {"detail": "A search query parameter 'q' is required."},
                 status=400,
             )
-        post = Post.objects.filter(tags__name__icontains=tag_name)
-        serializer = PostSerializer(post, many=True)
-        return Response(serializer.data)
 
+        # 1. Start with the base query
+        queryset = Post.objects.filter(tags__name__icontains=tag_name)
+
+        # 2. Optimize the query to fix N+1 problems
+        optimized_queryset = queryset.select_related(
+            'author__profile'  # For author details and profile info
+        ).prefetch_related(
+            'tags',            # For tag names
+            'mentions',        # For mentions
+            'media_items'      # For media items
+        ).annotate(
+            comment_count=Count('comments', distinct=True),
+            likes_count=Count('likes', distinct=True)
+        ).order_by('-created_at')
+
+        # 3. Apply pagination
+        paginator = PageNumberPagination()
+        paginated_queryset = paginator.paginate_queryset(optimized_queryset, request, view=self)
+
+        # 4. Serialize the paginated data
+        # Note: We use PostSerializer here to serialize the list of posts.
+        serializer = PostSerializer(paginated_queryset, many=True, context={'request': request})
+        
+        return paginator.get_paginated_response(serializer.data)
 
 
 
@@ -858,3 +891,85 @@ class PostLikeStatusView(APIView):
         }
 
         return Response(response_data)
+    
+
+
+# class ListPostOfParticularUser(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     @extend_schema(
+#         summary="List all posts of a particular user",
+#         description="Return a list of all posts of a particular user.",
+#         responses={200: PostSerializer(many=True)},
+#         tags=["Posts"],
+#     )
+#     def get(self, request):
+#         # user = get_object_or_404(User, username=username)
+#         user = request.user
+#         posts = Post.objects.filter(author=user)
+#         serializer = PostSerializer(posts, many=True)
+#         return Response(serializer.data)
+
+
+# Assuming you have pagination set up in settings.py
+
+class ListMyPosts(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="List Authenticated User's Posts",
+        description="Retrieves a paginated list of posts created by the currently authenticated user.",
+        tags=["Posts"],  # Groups this endpoint under "Posts" in the Swagger UI
+        parameters=[
+            OpenApiParameter(
+                name="page",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="A page number within the paginated result set.",
+            ),
+        ],
+        responses={
+            200: PostSerializer(many=True), # drf-spectacular automatically wraps this in a paginated response
+            401: {
+                "type": "object",
+                "properties": {
+                    "detail": {"type": "string"}
+                },
+                "example": {"detail": "Authentication credentials were not provided."}
+            },
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        # 1. Build the fully optimized queryset
+        queryset = Post.objects.filter(
+            author=user
+        ).select_related(
+            'author__profile'
+        ).prefetch_related(
+            'tags',
+            'mentions',
+            'media_items'
+        ).annotate(
+            comment_count=Count('comments', distinct=True),
+            likes_count=Count('likes', distinct=True)
+        ).order_by('-created_at')
+
+
+        # --- Pagination Logic Starts Here ---
+
+        # 2. Create an instance of the paginator
+        paginator = PageNumberPagination()
+        # You can configure page size in settings.py or here:
+        # paginator.page_size = 25 
+
+        # 3. Paginate the queryset to get the current page's results
+        paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+
+        # 4. Serialize the paginated queryset
+        serializer = PostSerializer(paginated_queryset, many=True)
+
+        # 5. Return the paginator's formatted response
+        return paginator.get_paginated_response(serializer.data)
