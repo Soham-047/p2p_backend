@@ -249,13 +249,13 @@ class CertificateSerializer(serializers.ModelSerializer):
 class PublicProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     full_name = serializers.CharField(source="user.full_name", read_only=True)
-
+    secondary_email = serializers.EmailField(source="user.secondary_email", read_only=True)
     experiences = ExperienceSerializer(many=True, read_only=True)
     skills = SkillSerializer(many=True, read_only=True)
-    education = EducationSerializer(many=True, read_only=True)
+    educations = EducationSerializer(many=True, read_only=True)
     links = LinkSerializer(many=True, read_only=True)
     dob = serializers.DateField(read_only=True)
-    achievements = serializers.CharField(read_only=True)
+    # achievements = serializers.CharField(read_only=True)
     headline = serializers.CharField(read_only=True)
     about = serializers.CharField(read_only=True)
     location = serializers.CharField(read_only=True)
@@ -268,8 +268,8 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = [
             "username", "full_name", "headline", "about", "location",
-            "dob", "achievements",
-            "experiences", "skills", "education",
+            "dob", 'secondary_email',
+            "experiences", "skills", "educations",
             "social_links", "projects", "certificates",
             "avatar_url", "banner_img_url", "links",
         ]
