@@ -628,6 +628,139 @@ import base64
 
 
 
+# class RecentChatsAPIView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request, *args, **kwargs):
+#         user_id = request.user.id
+#         redis_conn = r()
+#         response_data = []
+#         fernet = Fernet(settings.FERNET_KEY)
+
+#         # 1. Fetch the list of recent chat partners from Redis
+#         other_user_ids = [int(uid) for uid in redis_conn.zrevrange(recent_chats_key(user_id), 0, -1)]
+
+#         # --- CACHE HIT PATH ---
+#         if other_user_ids:
+#             # This path is mostly correct, we just need to fix the 'id' fallback
+#             unread_counts = {int(k): int(v) for k, v in redis_conn.hgetall(unread_key(user_id)).items()}
+#             users = User.objects.filter(id__in=other_user_ids)
+#             user_map = {user.id: user for user in users}
+            
+#             pipe = redis_conn.pipeline()
+#             for other_id in other_user_ids:
+#                 pipe.lindex(chat_key(user_id, other_id), 0)
+#             last_messages_json = pipe.execute()
+            
+#             for i, other_id in enumerate(other_user_ids):
+#                 user_obj = user_map.get(other_id)
+#                 if not user_obj: continue
+                
+#                 last_msg_str = last_messages_json[i]
+#                 last_message_preview = "No messages yet"
+#                 last_message_time = None
+#                 message_id = None # Default to None
+
+#                 if last_msg_str:
+#                     last_msg = json.loads(last_msg_str)
+#                     message_id = last_msg.get('id') # <-- FIX: Don't fall back to other_id
+#                     last_message_time = last_msg.get('timestamp')
+#                     try:
+#                         ciphertext_b64 = last_msg['ciphertext']
+#                         ciphertext_bytes = base64.b64decode(ciphertext_b64)
+#                         decrypted_text = fernet.decrypt(ciphertext_bytes).decode('utf-8')
+
+#                         if last_msg.get('sender_id') == user_id:
+#                             last_message_preview = f"You: {decrypted_text}"
+#                         else:
+#                             last_message_preview = decrypted_text
+#                     except (InvalidToken, base64.binascii.Error):
+#                         last_message_preview = "[Decryption Failed]"
+                
+#                 response_data.append({
+#                     "id": message_id, "other_user": {"id": user_obj.id, "username": user_obj.username, "full_name": user_obj.full_name},
+#                     "last_message_preview": last_message_preview, "timestamp": last_message_time,
+#                     "unread_count": unread_counts.get(other_id, 0)
+#                 })
+#             return Response(response_data)
+
+#         # --- CACHE MISS / DATABASE FALLBACK PATH ---
+#         latest_messages = Message.objects.filter(
+#             Q(sender_id=user_id) | Q(receiver_id=user_id)
+#         ).annotate(
+#             chat_partner_id=Case(
+#                 When(sender_id=user_id, then=DjF('receiver_id')),
+#                 default=DjF('sender_id'),
+#                 output_field=IntegerField()
+#             )
+#         ).order_by('chat_partner_id', '-timestamp').distinct('chat_partner_id')
+
+#         if not latest_messages:
+#             return Response([])
+
+#         unread_counts = {int(k): int(v) for k, v in redis_conn.hgetall(unread_key(user_id)).items()}
+#         cache_pipe = redis_conn.pipeline()
+        
+#         # Sort messages by timestamp descending to build the final response
+#         sorted_messages = sorted(latest_messages, key=lambda m: m.timestamp, reverse=True)
+
+#         for msg in sorted_messages:
+#             other_user = msg.sender if msg.receiver_id == user_id else msg.receiver
+            
+#             try:
+#                 decrypted_preview = fernet.decrypt(bytes(msg.ciphertext)).decode('utf-8')
+#                 if msg.sender_id == user_id:
+#                     decrypted_preview = f"You: {decrypted_preview}"
+#             except InvalidToken:
+#                 decrypted_preview = "[Decryption Failed]"
+            
+#             response_data.append({
+#                 "id": msg.id,
+#                 "other_user": {"id": other_user.id, "username": other_user.username, "full_name": other_user.full_name},
+#                 "last_message_preview": decrypted_preview,
+#                 "timestamp": msg.timestamp.isoformat(),
+#                 "unread_count": unread_counts.get(other_user.id, 0)
+#             })
+
+#             # --- FIX: FULLY REPOPULATE THE CACHE ---
+#             # 1. Re-populate the sorted set of recent chats
+#             timestamp = int(msg.timestamp.timestamp())
+#             cache_pipe.zadd(recent_chats_key(user_id), {other_user.id: timestamp})
+            
+#             # 2. Re-populate the last message for this specific chat history
+#             message_payload = {
+#                 "id": msg.id,
+#                 "sender_id": msg.sender_id,
+#                 "ciphertext": base64.b64encode(bytes(msg.ciphertext)).decode('utf-8'),
+#                 "timestamp": msg.timestamp.isoformat(),
+#             }
+#             chat_hist_key = chat_key(user_id, other_user.id)
+#             # Delete the old list and push the latest message to ensure it's clean
+#             cache_pipe.delete(chat_hist_key) 
+#             cache_pipe.lpush(chat_hist_key, json.dumps(message_payload))
+        
+#         cache_pipe.execute()
+#         return Response(response_data)
+
+
+
+
+# from django.conf import settings
+# from django.db.models import Q, Case, When, IntegerField
+# from django.db.models import F as DjF
+# from rest_framework.views import APIView
+# from rest_framework.permissions import IsAuthenticated
+# from rest_framework.response import Response
+# from redis import Redis as r
+# from cryptography.fernet import Fernet, InvalidToken
+# import json
+# import base64
+
+# # Assuming you have these models and keys defined
+# from .models import CustomUser as User, Message
+# from .redis_keys import recent_chats_key, unread_key, chat_key
+
+
 class RecentChatsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -642,9 +775,10 @@ class RecentChatsAPIView(APIView):
 
         # --- CACHE HIT PATH ---
         if other_user_ids:
-            # This path is mostly correct, we just need to fix the 'id' fallback
             unread_counts = {int(k): int(v) for k, v in redis_conn.hgetall(unread_key(user_id)).items()}
-            users = User.objects.filter(id__in=other_user_ids)
+            
+            # ✅ CHANGE 1: Use select_related to efficiently fetch the user's profile
+            users = User.objects.select_related('profile').filter(id__in=other_user_ids)
             user_map = {user.id: user for user in users}
             
             pipe = redis_conn.pipeline()
@@ -659,11 +793,11 @@ class RecentChatsAPIView(APIView):
                 last_msg_str = last_messages_json[i]
                 last_message_preview = "No messages yet"
                 last_message_time = None
-                message_id = None # Default to None
+                message_id = None
 
                 if last_msg_str:
                     last_msg = json.loads(last_msg_str)
-                    message_id = last_msg.get('id') # <-- FIX: Don't fall back to other_id
+                    message_id = last_msg.get('id')
                     last_message_time = last_msg.get('timestamp')
                     try:
                         ciphertext_b64 = last_msg['ciphertext']
@@ -677,15 +811,27 @@ class RecentChatsAPIView(APIView):
                     except (InvalidToken, base64.binascii.Error):
                         last_message_preview = "[Decryption Failed]"
                 
+                # ✅ CHANGE 2: Safely get avatar_url from the user's profile
+                avatar_url = user_obj.profile.avatar_url if hasattr(user_obj, 'profile') else None
+                
                 response_data.append({
-                    "id": message_id, "other_user": {"id": user_obj.id, "username": user_obj.username, "full_name": user_obj.full_name},
+                    "id": message_id,
+                    "other_user": {
+                        "id": user_obj.id,
+                        "username": user_obj.username,
+                        "full_name": user_obj.full_name,
+                        "avatar_url": avatar_url # <-- AVATAR URL ADDED
+                    },
                     "last_message_preview": last_message_preview, "timestamp": last_message_time,
                     "unread_count": unread_counts.get(other_id, 0)
                 })
             return Response(response_data)
 
         # --- CACHE MISS / DATABASE FALLBACK PATH ---
-        latest_messages = Message.objects.filter(
+        # ✅ CHANGE 3: Fetch related sender/receiver profiles in the initial query
+        latest_messages = Message.objects.select_related(
+            'sender__profile', 'receiver__profile'
+        ).filter(
             Q(sender_id=user_id) | Q(receiver_id=user_id)
         ).annotate(
             chat_partner_id=Case(
@@ -701,7 +847,6 @@ class RecentChatsAPIView(APIView):
         unread_counts = {int(k): int(v) for k, v in redis_conn.hgetall(unread_key(user_id)).items()}
         cache_pipe = redis_conn.pipeline()
         
-        # Sort messages by timestamp descending to build the final response
         sorted_messages = sorted(latest_messages, key=lambda m: m.timestamp, reverse=True)
 
         for msg in sorted_messages:
@@ -713,21 +858,27 @@ class RecentChatsAPIView(APIView):
                     decrypted_preview = f"You: {decrypted_preview}"
             except InvalidToken:
                 decrypted_preview = "[Decryption Failed]"
+
+            # ✅ CHANGE 4: Safely get the avatar_url here as well
+            avatar_url = other_user.profile.avatar_url if hasattr(other_user, 'profile') else None
             
             response_data.append({
                 "id": msg.id,
-                "other_user": {"id": other_user.id, "username": other_user.username, "full_name": other_user.full_name},
+                "other_user": {
+                    "id": other_user.id,
+                    "username": other_user.username,
+                    "full_name": other_user.full_name,
+                    "avatar_url": avatar_url # <-- AVATAR URL ADDED
+                },
                 "last_message_preview": decrypted_preview,
                 "timestamp": msg.timestamp.isoformat(),
                 "unread_count": unread_counts.get(other_user.id, 0)
             })
 
-            # --- FIX: FULLY REPOPULATE THE CACHE ---
-            # 1. Re-populate the sorted set of recent chats
+            # Re-populate the cache
             timestamp = int(msg.timestamp.timestamp())
             cache_pipe.zadd(recent_chats_key(user_id), {other_user.id: timestamp})
             
-            # 2. Re-populate the last message for this specific chat history
             message_payload = {
                 "id": msg.id,
                 "sender_id": msg.sender_id,
@@ -735,12 +886,20 @@ class RecentChatsAPIView(APIView):
                 "timestamp": msg.timestamp.isoformat(),
             }
             chat_hist_key = chat_key(user_id, other_user.id)
-            # Delete the old list and push the latest message to ensure it's clean
             cache_pipe.delete(chat_hist_key) 
             cache_pipe.lpush(chat_hist_key, json.dumps(message_payload))
         
         cache_pipe.execute()
         return Response(response_data)
+
+
+
+
+
+
+
+
+
 
 # --------------------------
 # Unread Counts

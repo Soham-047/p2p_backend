@@ -198,6 +198,40 @@ class RegistrationSerializer(serializers.Serializer):
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("A user with this college email already exists.")
         return value.lower()
+    def validate(self, data):
+        """
+        Check that the batch (graduation year) is 4 years after the admission year
+        derived from the college email.
+        """
+        college_email = data.get("college_email")
+        batch_str = data.get("batch")
+
+        if not college_email or not batch_str:
+            return data # Don't run if fields aren't present
+
+        try:
+            # Step 1: Extract the two-digit admission year from the email
+            # Example: "ritik.2201051cs@..." -> "2201051cs@..." -> "22"
+            admission_year_short = college_email.split('.')[1][:2]
+            
+            # Step 2: Convert years to integers for comparison
+            # Example: "22" -> 2022 and "2026" -> 2026
+            admission_year = int(f"20{admission_year_short}")
+            batch_year = int(batch_str)
+
+            # Step 3: Perform the validation
+            if (batch_year - admission_year) != 4:
+                raise serializers.ValidationError({
+                    "batch": "Graduation year does not match admission year"
+                })
+
+        except (IndexError, ValueError):
+            # This handles cases where the email format is wrong or years are not numbers
+            raise serializers.ValidationError({
+                "college_email": "Email format is incorrect"
+            })
+
+        return data
 
 
 # -------------------------------
