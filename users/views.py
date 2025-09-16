@@ -51,6 +51,7 @@ class RegistrationAPIView(APIView):
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        full_name = serializer.validated_data["full_name"]
         college_email = serializer.validated_data["college_email"]
         batch = serializer.validated_data.get("batch", "")
         is_current = serializer.validated_data.get("is_current_student", True)
@@ -60,6 +61,7 @@ class RegistrationAPIView(APIView):
 
         user = User.objects.create_user(username=username, email=college_email)
         user.set_password(password)
+        user.full_name = full_name
         user.batch = batch
         user.is_current_student = is_current
         user.save()
