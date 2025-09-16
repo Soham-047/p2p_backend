@@ -188,6 +188,7 @@ COLLEGE_DOMAIN = "@iiitbh.ac.in"
 # Registration
 # -------------------------------
 class RegistrationSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=150)
     college_email = serializers.EmailField()
     batch = serializers.CharField(max_length=10, required=False)
     is_current_student = serializers.BooleanField(default=True)
