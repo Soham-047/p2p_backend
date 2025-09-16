@@ -152,6 +152,7 @@ class PostSerializer(serializers.ModelSerializer):
         # Manually set comment_count for the response, as a new post has 0 comments
         post.comment_count = 0
         post.likes_count = 0
+        post.refresh_from_db()
         return post
 
     # def update(self, instance, validated_data):
