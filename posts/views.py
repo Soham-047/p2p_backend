@@ -30,8 +30,10 @@ import time
 from django.db.models import Count
 from django.utils.dateparse import parse_datetime
 log = logging.getLogger(__name__)
-
-from rest_framework.pagination import PageNumberPagination
+from django.db import transaction, IntegrityError
+# from rest_framework import status
+# from rest_framework.response import Response
+# from rest_framework.pagination import PageNumberPagination
 
 class PostListCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -123,15 +125,51 @@ class PostListCreateView(APIView):
             )
         ],
     )
+    # def post(self, request):
+    #     serializer = PostSerializer(data=request.data, context={'request': request})
+    #     if serializer.is_valid():
+    #         # tags = request.data.get("tags", [])
+    #         # for tag in tags:
+    #         #     Tag.objects.get_or_create(name=tag)
+    #         serializer.save()
+    #         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     def post(self, request):
+        """
+        Creates a new post, ensuring the entire operation is atomic.
+        """
         serializer = PostSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            # tags = request.data.get("tags", [])
-            # for tag in tags:
-            #     Tag.objects.get_or_create(name=tag)
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # First, validate the incoming data. If it's invalid, stop immediately.
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Use a database transaction. If any step inside this block fails,
+            # all database changes will be automatically rolled back.
+            with transaction.atomic():
+                # Your commented-out tag logic can be handled cleanly inside the
+                # serializer's .create() method. Calling .save() will trigger that.
+                serializer.save()
+
+        except IntegrityError as e:
+            # This catches errors like a unique constraint violation.
+            return Response(
+                {"error": "Database integrity error. A post with this title or slug might already exist.", "details": str(e)},
+                status=status.HTTP_409_CONFLICT
+            )
+        except Exception as e:
+            # This is a catch-all for any other unexpected error, like the
+            # database connection being down. It's a good idea to log this error.
+            # import logging
+            # logging.error(f"An unexpected error occurred: {e}")
+            return Response(
+                {"error": "An internal server error occurred while creating the post."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class PostDetailView(APIView):

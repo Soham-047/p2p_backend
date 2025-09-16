@@ -1016,5 +1016,77 @@ class OldChatHistoryView(APIView):
 
 
 
+# your_app/views.py
+# from rest_framework.views import APIView
+# from rest_framework.response import Response
+# from rest_framework import status
+# from rest_framework.permissions import IsAuthenticated
+# from django.db.models import Q
+import redis
+# import json
+# import base64
 
+# from .models import Message
+from . import redis_helpers
+
+class DeleteMessageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, message_id, *args, **kwargs):
+        user = request.user
+        
+        try:
+            message = Message.objects.get(id=message_id, sender=user)
+        except Message.DoesNotExist:
+            return Response(
+                {"error": "Message not found or you don't have permission to delete it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        other_user_id = message.receiver_id if message.sender_id == user.id else message.sender_id
+        
+        # Reconstruct the cache payload for LREM
+        message_payload = {
+            "id": message.id,
+            "sender_id": message.sender_id,
+            "ciphertext": base64.b64encode(bytes(message.ciphertext)).decode('utf-8'),
+            "timestamp": message.timestamp.isoformat(),
+        }
+        json_string_to_remove = json.dumps(message_payload)
+
+        # Delete the message from the primary database
+        message.delete()
+        
+        try:
+            redis_conn = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            chat_history_key = redis_helpers.chat_key(user.id, other_user_id)
+            
+            # 1. Remove the specific message from the chat history list
+            redis_conn.lrem(chat_history_key, 0, json_string_to_remove)
+
+            # 2. ✅ UPDATE THE RECENT CHATS CACHE
+            # Find the new latest message in the conversation from the database
+            new_latest_message = Message.objects.filter(
+                (Q(sender=user) & Q(receiver_id=other_user_id)) |
+                (Q(sender_id=other_user_id) & Q(receiver=user))
+            ).order_by('-timestamp').first()
+
+            # Get the cache keys for both users' recent chats
+            user_recent_key = redis_helpers.recent_chats_key(user.id)
+            other_user_recent_key = redis_helpers.recent_chats_key(other_user_id)
+
+            if new_latest_message:
+                # If messages still exist, update the sorted set with the new latest timestamp
+                new_timestamp = int(new_latest_message.timestamp.timestamp())
+                redis_conn.zadd(user_recent_key, {str(other_user_id): new_timestamp})
+                redis_conn.zadd(other_user_recent_key, {str(user.id): new_timestamp})
+            else:
+                # If no messages are left, remove the conversation from each user's recent chats
+                redis_conn.zrem(user_recent_key, str(other_user_id))
+                redis_conn.zrem(other_user_recent_key, str(user.id))
+
+        except Exception as e:
+            print(f"Could not update cache for deleted message {message_id}: {e}")
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
