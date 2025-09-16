@@ -102,16 +102,78 @@ class PostSerializer(serializers.ModelSerializer):
     #     return post
 
 
+    # def create(self, validated_data):
+    #     user = self.context['request'].user
+    #     tags_data = validated_data.pop('tags', [])
+    #     media_data = validated_data.pop('media_data', [])
+    #     content = validated_data.get('content', '')
+
+    #     # 1. Create the main Post object
+    #     # post = Post.objects.create(author=user, **validated_data)
+    #     post = Post(author=user, **validated_data)
+
+    #     # 2. Now, explicitly call the save() method from your model
+    #     post.save() 
+
+    #     # 2. Handle Tags in Bulk
+    #     if tags_data:
+    #         # Find which tags already exist in a single query
+    #         existing_tags = Tag.objects.filter(name__in=tags_data)
+    #         existing_tag_names = {t.name for t in existing_tags}
+            
+    #         # Determine which tags are new
+    #         new_tag_names = [name for name in tags_data if name not in existing_tag_names]
+            
+    #         # Create all new tags in a single bulk query
+    #         if new_tag_names:
+    #             new_tags = [Tag(name=name) for name in new_tag_names]
+    #             Tag.objects.bulk_create(new_tags)
+            
+    #         # Set all tags for the post
+    #         all_tags = Tag.objects.filter(name__in=tags_data)
+    #         post.tags.set(all_tags)
+
+    #     # 3. Handle Media in Bulk
+    #     if media_data:
+    #         # Create Media objects in memory first
+    #         media_objects_to_create = [
+    #             Media(
+    #                 post=post,
+    #                 url=item.get('url'),
+    #                 media_type=item.get('media_type'),
+    #                 display_order=index
+    #             ) for index, item in enumerate(media_data)
+    #         ]
+    #         # Create all media items in a single bulk query
+    #         Media.objects.bulk_create(media_objects_to_create)
+
+    #     # 4. Handle Mentions (this part was already efficient)
+    #     mentioned_usernames = re.findall(r'@(\w+)', content)
+    #     if mentioned_usernames:
+    #         mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
+    #         post.mentions.set(mentioned_users)
+        
+    #     # Manually set comment_count for the response, as a new post has 0 comments
+    #     post.comment_count = 0
+    #     post.likes_count = 0
+    #     post.refresh_from_db()
+    #     return post\
+
+
+
     def create(self, validated_data):
         user = self.context['request'].user
         tags_data = validated_data.pop('tags', [])
         media_data = validated_data.pop('media_data', [])
         content = validated_data.get('content', '')
 
-        # 1. Create the main Post object
-        post = Post.objects.create(author=user, **validated_data)
+        # 1. Create the main Post object instance
+        post = Post(author=user, **validated_data)
 
-        # 2. Handle Tags in Bulk
+        # 2. Explicitly call the save() method to trigger custom slug logic
+        post.save() 
+
+        # 3. Handle Tags
         if tags_data:
             # Find which tags already exist in a single query
             existing_tags = Tag.objects.filter(name__in=tags_data)
@@ -120,18 +182,18 @@ class PostSerializer(serializers.ModelSerializer):
             # Determine which tags are new
             new_tag_names = [name for name in tags_data if name not in existing_tag_names]
             
-            # Create all new tags in a single bulk query
+            # ✅ FIX: Create new tags individually to trigger the .save() method for each one
             if new_tag_names:
-                new_tags = [Tag(name=name) for name in new_tag_names]
-                Tag.objects.bulk_create(new_tags)
+                for name in new_tag_names:
+                    # This will correctly run the unique slug logic from your Tag model
+                    Tag.objects.create(name=name)
             
-            # Set all tags for the post
+            # Set all tags for the post (existing + newly created)
             all_tags = Tag.objects.filter(name__in=tags_data)
             post.tags.set(all_tags)
 
-        # 3. Handle Media in Bulk
+        # 4. Handle Media in Bulk (This is fine as Media has no custom .save() logic)
         if media_data:
-            # Create Media objects in memory first
             media_objects_to_create = [
                 Media(
                     post=post,
@@ -140,19 +202,19 @@ class PostSerializer(serializers.ModelSerializer):
                     display_order=index
                 ) for index, item in enumerate(media_data)
             ]
-            # Create all media items in a single bulk query
             Media.objects.bulk_create(media_objects_to_create)
 
-        # 4. Handle Mentions (this part was already efficient)
+        # 5. Handle Mentions
         mentioned_usernames = re.findall(r'@(\w+)', content)
         if mentioned_usernames:
             mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
             post.mentions.set(mentioned_users)
         
-        # Manually set comment_count for the response, as a new post has 0 comments
+        # 6. Prepare the object for the response
         post.comment_count = 0
         post.likes_count = 0
         post.refresh_from_db()
+        
         return post
 
     # def update(self, instance, validated_data):
@@ -188,15 +250,76 @@ class PostSerializer(serializers.ModelSerializer):
     #     return instance
 
 
+    # def update(self, instance, validated_data):
+    # # Pop relational data to handle it separately
+    #     tags_data = validated_data.pop('tags', None)
+    #     media_data = validated_data.pop('media_data', None)
+
+    #     # 1. Update the Post instance with simple fields
+    #     instance = super().update(instance, validated_data)
+
+    #     # 2. Handle Tags update in Bulk
+    #     if tags_data is not None:
+    #         # Find existing tags from the provided list in one query
+    #         existing_tags = Tag.objects.filter(name__in=tags_data)
+    #         existing_tag_names = {t.name for t in existing_tags}
+
+    #         # Determine which tags are new and need to be created
+    #         new_tag_names = [name for name in tags_data if name not in existing_tag_names]
+            
+    #         # Create all new tags in a single bulk query
+    #         if new_tag_names:
+    #             new_tags_to_create = [Tag(name=name) for name in new_tag_names]
+    #             Tag.objects.bulk_create(new_tags_to_create)
+            
+    #         # Get a queryset of all tags (existing + newly created) for the post
+    #         all_tags = Tag.objects.filter(name__in=tags_data)
+    #         # Use .set() to efficiently update the relation in one go
+    #         instance.tags.set(all_tags)
+
+    #     # 3. Handle Media update in Bulk
+    #     if media_data is not None:
+    #         # First, delete all existing media items for the post in one query
+    #         instance.media_items.all().delete()
+            
+    #         # Then, bulk-create the new media items
+    #         media_objects_to_create = [
+    #             Media(
+    #                 post=instance,
+    #                 url=item.get('url'),
+    #                 media_type=item.get('media_type'),
+    #                 display_order=index
+    #             ) for index, item in enumerate(media_data)
+    #         ]
+    #         # Check if there's anything to create before hitting the DB
+    #         if media_objects_to_create:
+    #             Media.objects.bulk_create(media_objects_to_create)
+
+    #     # 4. Handle Mentions update (only if content was updated)
+    #     if 'content' in validated_data:
+    #         content = validated_data.get('content', '')
+    #         mentioned_usernames = re.findall(r'@(\w+)', content)
+            
+    #         if mentioned_usernames:
+    #             mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
+    #             instance.mentions.set(mentioned_users)
+    #         else:
+    #             # If the updated content has no mentions, clear the relation
+    #             instance.mentions.clear()
+        
+    #     return instance
+
+
     def update(self, instance, validated_data):
     # Pop relational data to handle it separately
         tags_data = validated_data.pop('tags', None)
         media_data = validated_data.pop('media_data', None)
 
         # 1. Update the Post instance with simple fields
+        # This correctly calls the Post model's .save() method
         instance = super().update(instance, validated_data)
 
-        # 2. Handle Tags update in Bulk
+        # 2. Handle Tags update
         if tags_data is not None:
             # Find existing tags from the provided list in one query
             existing_tags = Tag.objects.filter(name__in=tags_data)
@@ -205,22 +328,20 @@ class PostSerializer(serializers.ModelSerializer):
             # Determine which tags are new and need to be created
             new_tag_names = [name for name in tags_data if name not in existing_tag_names]
             
-            # Create all new tags in a single bulk query
+            # ✅ FIX: Create new tags individually to trigger the .save() method for each one
             if new_tag_names:
-                new_tags_to_create = [Tag(name=name) for name in new_tag_names]
-                Tag.objects.bulk_create(new_tags_to_create)
+                for name in new_tag_names:
+                    # This ensures the unique slug logic in your Tag model is executed
+                    Tag.objects.create(name=name)
             
             # Get a queryset of all tags (existing + newly created) for the post
             all_tags = Tag.objects.filter(name__in=tags_data)
             # Use .set() to efficiently update the relation in one go
             instance.tags.set(all_tags)
 
-        # 3. Handle Media update in Bulk
+        # 3. Handle Media update (This part was already correct)
         if media_data is not None:
-            # First, delete all existing media items for the post in one query
             instance.media_items.all().delete()
-            
-            # Then, bulk-create the new media items
             media_objects_to_create = [
                 Media(
                     post=instance,
@@ -229,11 +350,10 @@ class PostSerializer(serializers.ModelSerializer):
                     display_order=index
                 ) for index, item in enumerate(media_data)
             ]
-            # Check if there's anything to create before hitting the DB
             if media_objects_to_create:
                 Media.objects.bulk_create(media_objects_to_create)
 
-        # 4. Handle Mentions update (only if content was updated)
+        # 4. Handle Mentions update (This part was already correct)
         if 'content' in validated_data:
             content = validated_data.get('content', '')
             mentioned_usernames = re.findall(r'@(\w+)', content)
@@ -242,8 +362,10 @@ class PostSerializer(serializers.ModelSerializer):
                 mentioned_users = CustomUser.objects.filter(username__in=mentioned_usernames)
                 instance.mentions.set(mentioned_users)
             else:
-                # If the updated content has no mentions, clear the relation
                 instance.mentions.clear()
+        
+        # ✅ GOOD PRACTICE: Refresh the instance to ensure it's not stale
+        instance.refresh_from_db()
         
         return instance
 
