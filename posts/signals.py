@@ -38,6 +38,17 @@ def post_saved(sender, instance: Post, created, **kwargs):
 #     warm_posts_list_cache.delay()
 #     warm_post_detail_cache.delay(instance.slug)
 
+# @receiver(post_delete, sender=Post)
+# def post_deleted(sender, instance: Post, **kwargs):
+#     """
+#     When a post is deleted:
+#     - Invalidate its cache
+#     - Warm up the posts list cache
+#     """
+#     invalidate_post_cache.delay(instance.slug)
+#     warm_posts_list_cache.delay()
+#     warm_posts_list_cache.delay()
+
 @receiver(post_delete, sender=Post)
 def post_deleted(sender, instance: Post, **kwargs):
     """
@@ -45,9 +56,10 @@ def post_deleted(sender, instance: Post, **kwargs):
     - Invalidate its cache
     - Warm up the posts list cache
     """
-    invalidate_post_cache.delay(instance.slug)
-    warm_posts_list_cache.delay()
-    warm_posts_list_cache.delay()
+    chain(
+        invalidate_post_cache.s(instance.slug),
+        warm_posts_list_cache.s(),
+    )()
 
 @receiver(m2m_changed, sender=Post.tags.through)
 def post_tags_changed(sender, instance: Post, action, **kwargs):
