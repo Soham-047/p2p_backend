@@ -459,12 +459,13 @@ class ReplySerializer(serializers.ModelSerializer):
     headline = serializers.SerializerMethodField()
     parent_author_full_name = serializers.CharField(source="parent.author.full_name", read_only=True)
     parent_author_username = serializers.ReadOnlyField(source="parent.author.username")
-
+    mentions = UserMentionSerializer(many=True, read_only=True)
     class Meta:
         model = Comment
         fields = [
             "slug",
             "content",
+            "mentions",
             "author_username",
             "author_full_name",
             "avatar_url",
