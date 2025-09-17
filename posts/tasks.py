@@ -186,7 +186,7 @@ def warm_post_detail_cache(self, slug: str, *args, **kwargs):
         request = factory.get('/')
         serializer = PostSerializer(post, context={'request': request})
 
-        cache_set(key_post_detail(slug), serializer.data, timeout=None)
+        cache_set(key_post_detail(slug), serializer.data, POSTS_TTL)
         
         log.info(f"Warmed cache for post detail: {slug}")
         return True
