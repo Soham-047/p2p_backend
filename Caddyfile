@@ -1,0 +1,17 @@
+p2p-backend1.dedyn.io {
+    # Reverse-proxy requests to the internal web container
+    reverse_proxy web:8000
+
+    # Optional: add some basic security headers (recommended)
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer-when-downgrade"
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}
