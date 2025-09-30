@@ -1,13 +1,14 @@
+version: "3.9"
+
 services:
   web:
     build: .
     command: >
-      sh -c "python manage.py collectstatic --noinput &&
-             daphne -b 0.0.0.0 -p 8000 p2p_comm.asgi:application"
+      sh -c "daphne -b 0.0.0.0 -p 8000 p2p_comm.asgi:application"
     volumes:
       - .:/app
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       - db
     env_file:
@@ -38,13 +39,31 @@ services:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data/
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - p2p-network
+
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
     networks:
       - p2p-network
 
 volumes:
   postgres_data:
-
+  caddy_data:
+  caddy_config:
 networks:
   p2p-network:
-    driver: bridge
+

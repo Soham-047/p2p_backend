@@ -15,9 +15,6 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . /app/
 
-# Collect static files during build
-RUN python manage.py collectstatic --noinput || true
-
 # Copy and make entrypoint executable
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

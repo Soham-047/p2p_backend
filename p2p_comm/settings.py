@@ -39,8 +39,6 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
-    "django.contrib.staticfiles",
-
     # Third-party
     "rest_framework",
     "rest_framework_simplejwt",
@@ -143,8 +141,6 @@ USE_TZ = True
 # -----------------------
 # Static & Media
 # -----------------------
-STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
