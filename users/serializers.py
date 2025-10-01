@@ -180,9 +180,9 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Profile, Experience, Skill, Education, Links, SocialLink, Project, Certificate
-
+from django.core.validators import email_validator
 User = get_user_model()
-COLLEGE_DOMAIN = "@iiitbh.ac.in"
+
 
 # -------------------------------
 # Registration
@@ -194,10 +194,10 @@ class RegistrationSerializer(serializers.Serializer):
     is_current_student = serializers.BooleanField(default=True)
 
     def validate_college_email(self, value):
-        if not value.lower().endswith(COLLEGE_DOMAIN):
-            raise serializers.ValidationError("Registration requires a college email.")
+        if not email_validator(value):
+            raise serializers.ValidationError("Registration requires a valid email.")
         if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("A user with this college email already exists.")
+            raise serializers.ValidationError("A user with this email already exists.")
         return value.lower()
     def validate(self, data):
         """
@@ -206,32 +206,6 @@ class RegistrationSerializer(serializers.Serializer):
         """
         college_email = data.get("college_email")
         batch_str = data.get("batch")
-
-        if not college_email or not batch_str:
-            return data # Don't run if fields aren't present
-
-        try:
-            # Step 1: Extract the two-digit admission year from the email
-            # Example: "ritik.2201051cs@..." -> "2201051cs@..." -> "22"
-            admission_year_short = college_email.split('.')[1][:2]
-            
-            # Step 2: Convert years to integers for comparison
-            # Example: "22" -> 2022 and "2026" -> 2026
-            admission_year = int(f"20{admission_year_short}")
-            batch_year = int(batch_str)
-
-            # Step 3: Perform the validation
-            if (batch_year - admission_year) != 4:
-                raise serializers.ValidationError({
-                    "batch": "Graduation year does not match admission year"
-                })
-
-        except (IndexError, ValueError):
-            # This handles cases where the email format is wrong or years are not numbers
-            raise serializers.ValidationError({
-                "college_email": "Email format is incorrect"
-            })
-
         return data
 
 
