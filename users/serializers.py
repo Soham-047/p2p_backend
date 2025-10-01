@@ -180,7 +180,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Profile, Experience, Skill, Education, Links, SocialLink, Project, Certificate
-from django.core.validators import email_validator
+from django.core.validators import EmailValidator
 User = get_user_model()
 
 
@@ -194,7 +194,7 @@ class RegistrationSerializer(serializers.Serializer):
     is_current_student = serializers.BooleanField(default=True)
 
     def validate_college_email(self, value):
-        if not email_validator(value):
+        if not EmailValidator(value):
             raise serializers.ValidationError("Registration requires a valid email.")
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
