@@ -206,27 +206,6 @@ class RegistrationSerializer(serializers.Serializer):
         """
         college_email = data.get("college_email")
         batch_str = data.get("batch")
-
-        if not college_email or not batch_str:
-            return data # Don't run if fields aren't present
-
-        try:
-            admission_year_short = college_email.split('.')[1][:2]
-            admission_year = int(f"20{admission_year_short}")
-            batch_year = int(batch_str)
-
-            # Step 3: Perform the validation
-            if (batch_year - admission_year) != 4:
-                raise serializers.ValidationError({
-                    "batch": "Graduation year does not match admission year"
-                })
-
-        except (IndexError, ValueError):
-            # This handles cases where the email format is wrong or years are not numbers
-            raise serializers.ValidationError({
-                "college_email": "Email format is incorrect"
-            })
-
         return data
 
 
