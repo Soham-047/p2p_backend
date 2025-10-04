@@ -90,7 +90,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_celery_results",
     # "django_celery_beat",
-
+    'drf_spectacular.contrib.rest_auth',
     # Your Project's Apps
     'users',
     'posts',
@@ -361,7 +361,8 @@ SITE_ID = 1
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 REST_AUTH = {
