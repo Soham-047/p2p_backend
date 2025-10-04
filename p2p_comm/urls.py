@@ -72,10 +72,21 @@ urlpatterns = [
     path("admin/", admin.site.urls),
 
 
+    # path('api/auth/', include('dj_rest_auth.urls')),
+    # path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    # path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
+    # path('accounts/', include('allauth.urls')),
+
     path('api/auth/', include('dj_rest_auth.urls')),
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
-    path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
-    path('accounts/', include('allauth.urls')),
+    
+    # 2. Add allauth's social URLs under a nested path
+    # This is the line that defines the /google/callback/ path
+    path('api/auth/', include('allauth.socialaccount.urls')), 
+    
+    # 3. Your specific GoogleLogin view for token exchange
+    # (Note: This custom path is separate from the redirect above)
+    path('api/auth/google/', GoogleLogin.as_view(), name='google_login'), 
 
 
     path("api/users-app/", include("users.urls")),
