@@ -20,9 +20,32 @@ from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from django.conf import settings
 from django.conf.urls.static import static
+# your_project/urls.py
+
+from django.contrib import admin
+from django.urls import path, include
+from dj_rest_auth.registration.views import SocialLoginView
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+
+# This view handles the final step where the authorization code is exchanged for tokens
+class GoogleLogin(SocialLoginView):
+    adapter_class = GoogleOAuth2Adapter
+    # Use the dynamic URL from your settings file
+    callback_url = settings.GOOGLE_CALLBACK_URL # <-- Use the setting
+    client_class = OAuth2Client
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+
+
+    path('api/auth/', include('dj_rest_auth.urls')),
+    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
+    path('accounts/', include('allauth.urls')),
+
+
     path("api/users-app/", include("users.urls")),
     path("api/posts-app/", include("posts.urls")),
     path("api/messages-app/", include("p2p_messages.urls")),

@@ -30,6 +30,49 @@ ALLOWED_HOSTS = get_env("ALLOWED_HOSTS").split(",")
 # -----------------------
 # Installed Apps
 # -----------------------
+# INSTALLED_APPS = [
+#     'daphne',
+
+#     # Django core
+#     "django.contrib.admin",
+#     "django.contrib.auth",
+#     "django.contrib.contenttypes",
+#     "django.contrib.sessions",
+#     "django.contrib.messages",
+#     "django.contrib.staticfiles",
+
+#     # Third-party
+#     "rest_framework",
+#     "rest_framework_simplejwt",
+#     "anymail",
+#     "drf_spectacular",
+#     "corsheaders",
+#     "django_celery_results",
+#     # "django_celery_beat",
+
+#     # Project apps
+#     'p2p_messages',
+#     "users",
+#     'posts',
+#     "channels",
+
+#     'django.contrib.sites',  # Required by allauth
+
+#     # 'rest_framework',
+#     # 'rest_framework.authtoken',
+#     # 'rest_framework_simplejwt',
+
+#     'dj_rest_auth',
+#     'dj_rest_auth.registration',
+
+#     'allauth',
+#     'allauth.account',
+#     'allauth.socialaccount',
+#     'allauth.socialaccount.providers.google', # For Google OAuth
+# ]
+
+# settings.py
+
 INSTALLED_APPS = [
     'daphne',
 
@@ -48,11 +91,25 @@ INSTALLED_APPS = [
     "django_celery_results",
     # "django_celery_beat",
 
-    # Project apps
-    'p2p_messages',
-    "users",
+    # Your Project's Apps
+    'users',
     'posts',
-    "channels",
+    'channels',
+    'p2p_messages',
+
+    'django.contrib.sites',  # Required by allauth
+
+#     # 'rest_framework',
+#     # 'rest_framework.authtoken',
+#     # 'rest_framework_simplejwt',
+
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
+
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google', # For Google OAuth
 ]
 
 MIDDLEWARE = [
@@ -65,6 +122,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 # -----------------------
@@ -141,8 +199,19 @@ USE_TZ = True
 # -----------------------
 # Static & Media
 # -----------------------
+# settings.py
+
+# STATIC_URL: The URL prefix for static files (MUST have a trailing slash)
+STATIC_URL = "/static/" 
+
+# STATIC_ROOT: The absolute path to the directory where collectstatic will gather static files (used in production).
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# MEDIA settings (Less relevant to admin CSS, but good to check)
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# MEDIA_URL = "/media/"
+# MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -278,3 +347,84 @@ LOGGING = {
         "level": "INFO",
     },
 }
+
+# django-allauth setting
+SOCIALACCOUNT_AUTO_SIGNUP = True
+
+# settings.py
+
+
+# Required by django-allauth
+SITE_ID = 1
+
+# Configure dj-rest-auth to use JWT
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
+
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_HTTPONLY': False, # Allow JWT to be read by frontend JS
+    'TOKEN_MODEL': None,
+    'USER_DETAILS_SERIALIZER': 'users.serializers.JWTUserDetailsSerializer',
+}
+
+# Configure django-allauth for the Google provider
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': get_env('YOUR_GOOGLE_CLIENT_ID'),       # Paste your Client ID here
+            'secret': get_env('YOUR_GOOGLE_CLIENT_SECRET'),    # Paste your Client Secret here
+            'key': ''
+        },
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        }
+    }
+}
+SOCIALACCOUNT_ADAPTER = 'users.adapters.CustomSocialAccountAdapter'
+GOOGLE_CALLBACK_URL = get_env(
+    'GOOGLE_CALLBACK_URL'
+)
+
+
+# Optional: Disable standard email/password registration if you only want social login
+# ACCOUNT_EMAIL_VERIFICATION = 'none'
+# ACCOUNT_AUTHENTICATION_METHOD = 'email'
+# ACCOUNT_EMAIL_REQUIRED = True
+# ACCOUNT_UNIQUE_EMAIL = True
+# ACCOUNT_USERNAME_REQUIRED = False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

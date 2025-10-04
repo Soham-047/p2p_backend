@@ -212,6 +212,43 @@ class RegistrationSerializer(serializers.Serializer):
 # -------------------------------
 # Public Profile
 # -------------------------------
+# from rest_framework import serializers
+# from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class JWTUserDetailsSerializer(serializers.ModelSerializer):
+    """
+    Serializer used by dj-rest-auth to return the 'user' object 
+    in the JWT/Social Login response.
+    Explicitly define AbstractUser fields to ensure they are read.
+    """
+    # Explicitly define standard fields (inherited from AbstractUser)
+    username = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True) # Email is unique=True on your model
+    first_name = serializers.CharField(read_only=True)
+    last_name = serializers.CharField(read_only=True)
+    
+    # Custom fields from your CustomUser model
+    full_name = serializers.CharField(read_only=True)
+    batch = serializers.CharField(read_only=True)
+    is_current_student = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = User
+        fields = (
+            # Removed 'pk' as requested
+            'username', 
+            'email', 
+            'first_name', 
+            'last_name',
+            'full_name', 
+            'batch', 
+            'is_current_student',
+        )
+        # Note: 'read_only_fields' is redundant since all fields are read_only=True,
+        # but leaving the structure clean.
+
 
 class ExperienceSerializer(serializers.ModelSerializer):
     class Meta:
