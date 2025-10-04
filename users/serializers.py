@@ -391,3 +391,25 @@ class MeProfileSerializer(ProfileSerializer):
         fields = ProfileSerializer.Meta.fields
         read_only_fields = ["updated_at"]
 
+class GoogleAuthRequestSerializer(serializers.Serializer):
+    """Serializer to document the expected request body for Google Login."""
+    access_token = serializers.CharField(
+        required=True,
+        help_text="The OAuth2 access token received from Google after client-side authorization."
+    )
+
+
+
+
+
+class GoogleAuthResponseSerializer(serializers.Serializer):
+    """
+    Serializer to document the full JWT response structure without relying on 
+    ModelSerializer introspection at the top level.
+    """
+    # Standard JWT fields
+    access = serializers.CharField(read_only=True, help_text="JWT Access Token")
+    refresh = serializers.CharField(read_only=True, help_text="JWT Refresh Token")
+    
+    # Nested User details field
+    user = JWTUserDetailsSerializer(read_only=True, help_text="Detailed user object.")

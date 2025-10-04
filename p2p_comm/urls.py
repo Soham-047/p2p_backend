@@ -27,13 +27,45 @@ from django.urls import path, include
 from dj_rest_auth.registration.views import SocialLoginView
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+ 
+# This view handles the final step where the authorization code is exchanged for tokens
+# p2p_comm/urls.py
+
+# ... imports ...
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+from drf_spectacular.openapi import AutoSchema # <--- ENSURE THIS IS IMPORTED
+from users.serializers import GoogleAuthRequestSerializer, GoogleAuthResponseSerializer 
+from dj_rest_auth.registration.views import SocialLoginView
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from django.conf import settings # For settings.GOOGLE_CALLBACK_URL
 
 # This view handles the final step where the authorization code is exchanged for tokens
+@extend_schema(
+    summary="Google Social Login (Exchange Token)",
+    description="Exchanges the client-side Google OAuth2 access token for JWT access/refresh tokens.",
+    request=GoogleAuthRequestSerializer,
+    responses={
+        200: OpenApiResponse(
+            response=GoogleAuthResponseSerializer,
+            description="Login successful. Returns JWT and user data."
+        ),
+        400: OpenApiResponse(
+            description="Bad request (e.g., invalid token, user already exists with different provider)."
+        )
+    },
+    tags=["Auth - Social"]
+)
 class GoogleLogin(SocialLoginView):
+    # CRITICAL FIX: OVERRIDE THE INHERITED SCHEMA ATTRIBUTE
+    schema = AutoSchema() 
+    
     adapter_class = GoogleOAuth2Adapter
     # Use the dynamic URL from your settings file
     callback_url = settings.GOOGLE_CALLBACK_URL # <-- Use the setting
     client_class = OAuth2Client
+
+# ... rest of your urlpatterns ...
 
 
 urlpatterns = [
