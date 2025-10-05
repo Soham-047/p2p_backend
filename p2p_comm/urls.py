@@ -86,10 +86,10 @@ urlpatterns = [
     
     # CRITICAL: Include the full allauth URLs under a separate path.
     # This path contains the actual, correct callback view, regardless of its internal name.
-    path('accounts/', include('allauth.urls')), 
-    
     # Your specific GoogleLogin view for the POST request (remains separate)
     path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
+    path('accounts/', include('allauth.urls')), 
+    
 
 
     path("api/users-app/", include("users.urls")),
