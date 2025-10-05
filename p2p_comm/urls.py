@@ -30,7 +30,7 @@ from allauth.socialaccount.providers.oauth2.client import OAuth2Client
  
 # This view handles the final step where the authorization code is exchanged for tokens
 # p2p_comm/urls.py
-
+from allauth.socialaccount import views as socialaccount_views 
 # ... imports ...
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 from drf_spectacular.openapi import AutoSchema # <--- ENSURE THIS IS IMPORTED
@@ -39,7 +39,8 @@ from dj_rest_auth.registration.views import SocialLoginView
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from django.conf import settings # For settings.GOOGLE_CALLBACK_URL
-
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 # This view handles the final step where the authorization code is exchanged for tokens
 @extend_schema(
     summary="Google Social Login (Exchange Token)",
@@ -56,6 +57,8 @@ from django.conf import settings # For settings.GOOGLE_CALLBACK_URL
     },
     tags=["Auth - Social"]
 )
+# 🎯 FIX: Apply the decorator to the entire class view
+@method_decorator(csrf_exempt, name='dispatch')
 class GoogleLogin(SocialLoginView):
     # CRITICAL FIX: OVERRIDE THE INHERITED SCHEMA ATTRIBUTE
     schema = AutoSchema() 
@@ -77,16 +80,16 @@ urlpatterns = [
     # path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
     # path('accounts/', include('allauth.urls')),
 
+    # Standard dj-rest-auth URLs
     path('api/auth/', include('dj_rest_auth.urls')),
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
     
-    # 2. Add allauth's social URLs under a nested path
-    # This is the line that defines the /google/callback/ path
-    path('api/auth/', include('allauth.socialaccount.urls')), 
+    # CRITICAL: Include the full allauth URLs under a separate path.
+    # This path contains the actual, correct callback view, regardless of its internal name.
+    path('accounts/', include('allauth.urls')), 
     
-    # 3. Your specific GoogleLogin view for token exchange
-    # (Note: This custom path is separate from the redirect above)
-    path('api/auth/google/', GoogleLogin.as_view(), name='google_login'), 
+    # Your specific GoogleLogin view for the POST request (remains separate)
+    path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
 
 
     path("api/users-app/", include("users.urls")),
