@@ -693,8 +693,20 @@ class LikeComment(APIView):
 
 
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
+from rest_framework import status
+from django.db.models import Q, Count, Value, TextField
+from django.db.models.functions import Concat
+from django.contrib.postgres.search import SearchVector, TrigramSimilarity
+# Assuming User, Post, Serializers, and Schema imports are available
+
 class SearchView(APIView):
     permission_classes = [IsAuthenticated]
+
+    # Set pagination_class as a class attribute for better convention (optional, but good practice)
+    pagination_class = PageNumberPagination
 
     @extend_schema(
         summary="Unified search for users or posts",
@@ -714,14 +726,8 @@ class SearchView(APIView):
             ),
         ],
         responses={
-            200: OpenApiResponse(
-                response=UserSearchSerializer(many=True),
-                description="List of users (if type=people)"
-            ),
-            201: OpenApiResponse(
-                response=PostSearchSerializer(many=True),
-                description="List of posts (if type=posts)"
-            ),
+            # Using 200 for both is generally better for GET requests returning data
+            200: OpenApiResponse(response=PostSearchSerializer(many=True), description="List of posts or users"),
             400: SimpleDetailSerializer,
         },
         tags=["Search"],
@@ -731,38 +737,45 @@ class SearchView(APIView):
         search_type = request.query_params.get('type', 'posts')
 
         if not query:
-            return Response({"detail": "A search query parameter 'q' is required."}, status=400)
+            return Response(
+                {"detail": "A search query parameter 'q' is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if search_type == 'people':
             queryset = User.objects.annotate(
                 similarity=TrigramSimilarity('username', query),
             ).filter(similarity__gt=0.3).order_by('-similarity')
             serializer_class = UserSearchSerializer
-            # return Response(serializer.data)
 
         elif search_type == 'posts':
             queryset = Post.objects.filter(published=True).annotate(
                 similarity=TrigramSimilarity(
-                    Concat('title', Value(' '), 'content', output_field=models.TextField()),
-                    query
+                    Concat('title', Value(' '), 'content', output_field=TextField()), query
                 ),
                 search=SearchVector('title', 'content'),
             ).filter(
                 Q(search=query) | Q(similarity__gt=0.3)
             ).order_by('-similarity')
             serializer_class = PostSearchSerializer
-            # return Response(serializer.data)
 
-        else: 
-            return Response({"detail": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."}, status=400)
-        
-        paginator = PageNumberPagination()
+        else:
+            return Response(
+                {"detail": f"Invalid search type '{search_type}'. Use 'people' or 'posts'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+        # paginator = self.pagination_class()
+        # paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
 
-        serializer = serializer_class(paginated_queryset, many=True)
+        # if paginated_queryset is not None:
+        #     serializer = serializer_class(paginated_queryset, many=True)
+        #     return paginator.get_paginated_response(serializer.data)
+        # else:
 
-        return paginator.get_paginated_response(serializer.data)
+        serializer = serializer_class(queryset, many=True)
+        return Response(serializer.data)
+
     
 
 
@@ -782,53 +795,192 @@ class SearchView(APIView):
 #     def get(self, request, *args, **kwargs):
 #         return super().get(request, *args, **kwargs)
    
-class UserSearchAPIView(APIView):
-    """
-    An API view for searching users by username or full name.
-    """
+# class UserSearchAPIView(APIView):
+#     """
+#     An API view for searching users by username or full name.
+#     """
+#     permission_classes = [IsAuthenticated]
+
+#     @extend_schema(
+#         summary="Search all users",
+#         description="Return a list of all users matched with the search query. The search is performed on the 'username' and 'full_name' fields.",
+#         responses={200: UserSearchSerializer(many=True)},
+#         # ✅ ADD THIS PART
+#         parameters=[
+#             OpenApiParameter(
+#                 name='search',
+#                 type=str,
+#                 description='A search term to filter users by username or full name.',
+#                 required=False
+#             )
+#         ],
+#         tags=["Search"],
+#     )
+#     def get(self, request, *args, **kwargs):
+#         # 1. Get the search term from the query parameters.
+#         #    The key 'search' is the default for DRF's SearchFilter.
+#         query = self.request.query_params.get('search', None)
+
+#         # 2. Start with the base queryset of all users.
+#         queryset = User.objects.all()
+
+#         # 3. If a search query is provided, filter the queryset.
+#         if query:
+#             # Use Q objects to create a case-insensitive search across multiple fields with an OR condition.
+#             queryset = queryset.filter(
+#                 Q(username__icontains=query) | Q(full_name__icontains=query)
+#             )
+
+#         # 4. Serialize the resulting queryset.
+#         serializer = UserSearchSerializer(queryset, many=True)
+
+#         # 5. Return the serialized data in the response.
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# @extend_schema_view(
+#     get=extend_schema(
+#         summary="Search for tags",
+#         description="Search and return tags by query string.",
+#         parameters=[
+#             OpenApiParameter(
+#                 name="q",
+#                 location=OpenApiParameter.QUERY,
+#                 required=True,
+#                 type=OpenApiTypes.STR,
+#                 description="Search query string",
+#             )
+#         ],
+#         responses={
+#             200: OpenApiResponse(response=TagSerializer(many=True)),
+#             400: OpenApiResponse(response=SimpleDetailSerializer),
+#         },
+#         tags=["Search"],
+#     )
+# )
+
+
+# class TagSearchAPIView(APIView):
+#     permission_classes = [IsAuthenticated]
+#     # Note: The serializer is defined in the get method, so this class attribute isn't used.
+#     # serializer_class = TagSerializer 
+
+#     def get(self, request, *args, **kwargs):
+#         tag_name = request.query_params.get("q")
+#         if not tag_name:
+#             return Response(
+#                 {"detail": "A search query parameter 'q' is required."},
+#                 status=400,
+#             )
+
+#         # 1. Start with the base query
+#         queryset = Post.objects.filter(tags__name__icontains=tag_name)
+
+#         # 2. Optimize the query to fix N+1 problems
+#         optimized_queryset = queryset.select_related(
+#             'author__profile'  # For author details and profile info
+#         ).prefetch_related(
+#             'tags',            # For tag names
+#             'mentions',        # For mentions
+#             'media_items'      # For media items
+#         ).annotate(
+#             comment_count=Count('comments', distinct=True),
+#             likes_count=Count('likes', distinct=True)
+#         ).order_by('-created_at')
+
+#         # 3. Apply pagination
+#         paginator = PageNumberPagination()
+#         paginated_queryset = paginator.paginate_queryset(optimized_queryset, request, view=self)
+
+#         # 4. Serialize the paginated data
+#         # Note: We use PostSerializer here to serialize the list of posts.
+#         serializer = PostSerializer(paginated_queryset, many=True, context={'request': request})
+        
+#         return paginator.get_paginated_response(serializer.data)
+
+# class UserSearchAPIView(APIView):
+#     """
+#     An API view for searching users by username or full name.
+#     """
+#     permission_classes = [IsAuthenticated]
+
+#     @extend_schema(
+#         summary="Search all users",
+#         description="Return a list of all users matched with the search query. "
+#                     "The search is performed on the 'username' and 'full_name' fields.",
+#         responses={200: UserSearchSerializer(many=True)},
+#         parameters=[
+#             OpenApiParameter(
+#                 name='search',
+#                 type=str,
+#                 description='A search term to filter users by username or full name.',
+#                 required=False
+#             )
+#         ],
+#         tags=["Search"],
+#     )
+#     def get(self, request, *args, **kwargs):
+#         query = request.query_params.get('search', None)
+#         queryset = User.objects.all()
+
+#         if query:
+#             queryset = queryset.filter(
+#                 Q(username__icontains=query) | Q(full_name__icontains=query)
+#             )
+
+#         # Pagination
+#         paginator = PageNumberPagination()
+#         paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+
+#         serializer = UserSearchSerializer(
+#             paginated_queryset if paginated_queryset is not None else queryset, 
+#             many=True, 
+#             context={'request': request}
+#         )
+
+#         if paginated_queryset is not None:
+#             return paginator.get_paginated_response(serializer.data)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+
+PAGE_SIZE = 10 
+from rest_framework.generics import ListAPIView
+class UserSearchAPIView(ListAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = UserSearchSerializer
+    # pagination_class = None  # use default from settings
 
     @extend_schema(
         summary="Search all users",
-        description="Return a list of all users matched with the search query. The search is performed on the 'username' and 'full_name' fields.",
-        responses={200: UserSearchSerializer(many=True)},
-        # ✅ ADD THIS PART
+        description="Return a paginated list of users matched with the search query. "
+                    "The search is performed on the 'username' and 'full_name' fields.",
         parameters=[
             OpenApiParameter(
                 name='search',
                 type=str,
                 description='A search term to filter users by username or full name.',
                 required=False
-            )
+            ),
+            OpenApiParameter(
+                name="page",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Page number for pagination",
+            ),
         ],
         tags=["Search"],
     )
-    def get(self, request, *args, **kwargs):
-        # 1. Get the search term from the query parameters.
-        #    The key 'search' is the default for DRF's SearchFilter.
+    def get_queryset(self):
         query = self.request.query_params.get('search', None)
-
-        # 2. Start with the base queryset of all users.
         queryset = User.objects.all()
-
-        # 3. If a search query is provided, filter the queryset.
         if query:
-            # Use Q objects to create a case-insensitive search across multiple fields with an OR condition.
-            queryset = queryset.filter(
-                Q(username__icontains=query) | Q(full_name__icontains=query)
-            )
-
-        # 4. Serialize the resulting queryset.
-        serializer = UserSearchSerializer(queryset, many=True)
-
-        # 5. Return the serialized data in the response.
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
+            queryset = queryset.filter(Q(username__icontains=query) | Q(full_name__icontains=query))
+        return queryset
 
 @extend_schema_view(
     get=extend_schema(
         summary="Search for tags",
-        description="Search and return tags by query string.",
+        description="Search and return posts filtered by tags.",
         parameters=[
             OpenApiParameter(
                 name="q",
@@ -839,53 +991,51 @@ class UserSearchAPIView(APIView):
             )
         ],
         responses={
-            200: OpenApiResponse(response=TagSerializer(many=True)),
+            200: OpenApiResponse(response=PostSerializer(many=True)),
             400: OpenApiResponse(response=SimpleDetailSerializer),
         },
         tags=["Search"],
     )
 )
-
-
 class TagSearchAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    # Note: The serializer is defined in the get method, so this class attribute isn't used.
-    # serializer_class = TagSerializer 
 
     def get(self, request, *args, **kwargs):
         tag_name = request.query_params.get("q")
         if not tag_name:
             return Response(
                 {"detail": "A search query parameter 'q' is required."},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 1. Start with the base query
+        # Base queryset
         queryset = Post.objects.filter(tags__name__icontains=tag_name)
 
-        # 2. Optimize the query to fix N+1 problems
+        # Optimize query
         optimized_queryset = queryset.select_related(
-            'author__profile'  # For author details and profile info
+            'author__profile'
         ).prefetch_related(
-            'tags',            # For tag names
-            'mentions',        # For mentions
-            'media_items'      # For media items
+            'tags',
+            'mentions',
+            'media_items'
         ).annotate(
             comment_count=Count('comments', distinct=True),
             likes_count=Count('likes', distinct=True)
         ).order_by('-created_at')
 
-        # 3. Apply pagination
-        paginator = PageNumberPagination()
-        paginated_queryset = paginator.paginate_queryset(optimized_queryset, request, view=self)
+        # Pagination
+        # paginator = PageNumberPagination()
+        # paginated_queryset = paginator.paginate_queryset(optimized_queryset, request, view=self)
 
-        # 4. Serialize the paginated data
-        # Note: We use PostSerializer here to serialize the list of posts.
-        serializer = PostSerializer(paginated_queryset, many=True, context={'request': request})
-        
-        return paginator.get_paginated_response(serializer.data)
+        serializer = PostSerializer(
+            optimized_queryset,
+            many=True,
+            context={'request': request}
+        )
 
-
+        # if paginated_queryset is not None:
+        #     return paginator.get_paginated_response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class PostLikeStatusView(APIView):
     """
@@ -992,13 +1142,144 @@ class PostLikeStatusView(APIView):
 
 # Assuming you have pagination set up in settings.py
 
+# class ListMyPosts(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     @extend_schema(
+#         summary="List Authenticated User's Posts",
+#         description="Retrieves a paginated list of posts created by the currently authenticated user.",
+#         tags=["Posts"],  # Groups this endpoint under "Posts" in the Swagger UI
+#         parameters=[
+#             OpenApiParameter(
+#                 name="page",
+#                 type=OpenApiTypes.INT,
+#                 location=OpenApiParameter.QUERY,
+#                 required=False,
+#                 description="A page number within the paginated result set.",
+#             ),
+#         ],
+#         responses={
+#             200: PostSerializer(many=True), # drf-spectacular automatically wraps this in a paginated response
+#             401: {
+#                 "type": "object",
+#                 "properties": {
+#                     "detail": {"type": "string"}
+#                 },
+#                 "example": {"detail": "Authentication credentials were not provided."}
+#             },
+#         }
+#     )
+#     def get(self, request, *args, **kwargs):
+#         user = request.user
+
+#         # 1. Build the fully optimized queryset
+#         queryset = Post.objects.filter(
+#             author=user
+#         ).select_related(
+#             'author__profile'
+#         ).prefetch_related(
+#             'tags',
+#             'mentions',
+#             'media_items'
+#         ).annotate(
+#             comment_count=Count('comments', distinct=True),
+#             likes_count=Count('likes', distinct=True)
+#         ).order_by('-created_at')
+
+
+#         # --- Pagination Logic Starts Here ---
+
+#         # 2. Create an instance of the paginator
+#         paginator = PageNumberPagination()
+#         # You can configure page size in settings.py or here:
+#         # paginator.page_size = 25 
+
+#         # 3. Paginate the queryset to get the current page's results
+#         paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+
+#         # 4. Serialize the paginated queryset
+#         serializer = PostSerializer(paginated_queryset, many=True)
+
+#         # 5. Return the paginator's formatted response
+#         return paginator.get_paginated_response(serializer.data)
+    
+
+
+# class ListUserPostsView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     @extend_schema(
+#         summary="List a User's Posts", # <-- UPDATED
+#         description="Retrieves a paginated list of posts created by a specific user.", # <-- UPDATED
+#         tags=["Posts"],
+#         parameters=[
+#             # ✅ ADDED: New path parameter for the username
+#             OpenApiParameter(
+#                 name="username",
+#                 type=OpenApiTypes.STR,
+#                 location=OpenApiParameter.PATH,
+#                 required=True,
+#                 description="The username of the user whose posts are to be retrieved.",
+#             ),
+#             OpenApiParameter(
+#                 name="page",
+#                 type=OpenApiTypes.INT,
+#                 location=OpenApiParameter.QUERY,
+#                 required=False,
+#                 description="A page number within the paginated result set.",
+#             ),
+#         ],
+#         responses={
+#             200: PostSerializer(many=True),
+#             401: {"description": "Authentication credentials were not provided."},
+#             404: {"description": "User not found."} # <-- ADDED: Document the 404 case
+#         }
+        
+#     )
+#     # ✅ CHANGED: The method now accepts 'username' from the URL
+#     def get(self, request, username, *args, **kwargs):
+        
+#         # ✅ CHANGED: Look up the target user by username, return 404 if not found
+#         target_user = get_object_or_404(User, username=username)
+
+#         # 1. Build the fully optimized queryset for the target user
+#         queryset = Post.objects.filter(
+#             author=target_user # <-- UPDATED to use the user from the URL
+#         ).select_related(
+#             'author__profile'
+#         ).prefetch_related(
+#             'tags',
+#             'mentions',
+#             'media_items'
+#         ).annotate(
+#             comment_count=Count('comments', distinct=True),
+#             likes_count=Count('likes', distinct=True)
+#         ).order_by('-created_at')
+
+
+#         # --- Pagination Logic (No Changes Needed Here) ---
+
+#         # 2. Create an instance of the paginator
+#         paginator = PageNumberPagination()
+        
+#         # 3. Paginate the queryset
+#         paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+
+#         # 4. Serialize the paginated queryset
+#         serializer = PostSerializer(paginated_queryset, many=True)
+
+#         # 5. Return the paginator's formatted response
+#         return paginator.get_paginated_response(serializer.data)
+    
+
+
 class ListMyPosts(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
         summary="List Authenticated User's Posts",
         description="Retrieves a paginated list of posts created by the currently authenticated user.",
-        tags=["Posts"],  # Groups this endpoint under "Posts" in the Swagger UI
+        tags=["Posts"],
         parameters=[
             OpenApiParameter(
                 name="page",
@@ -1009,12 +1290,10 @@ class ListMyPosts(APIView):
             ),
         ],
         responses={
-            200: PostSerializer(many=True), # drf-spectacular automatically wraps this in a paginated response
+            200: PostSerializer(many=True),
             401: {
                 "type": "object",
-                "properties": {
-                    "detail": {"type": "string"}
-                },
+                "properties": {"detail": {"type": "string"}},
                 "example": {"detail": "Authentication credentials were not provided."}
             },
         }
@@ -1022,7 +1301,6 @@ class ListMyPosts(APIView):
     def get(self, request, *args, **kwargs):
         user = request.user
 
-        # 1. Build the fully optimized queryset
         queryset = Post.objects.filter(
             author=user
         ).select_related(
@@ -1036,34 +1314,28 @@ class ListMyPosts(APIView):
             likes_count=Count('likes', distinct=True)
         ).order_by('-created_at')
 
+        # paginator = PageNumberPagination()
+        # paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
 
-        # --- Pagination Logic Starts Here ---
+        serializer = PostSerializer(
+            queryset,
+            many=True,
+            context={'request': request}
+        )
 
-        # 2. Create an instance of the paginator
-        paginator = PageNumberPagination()
-        # You can configure page size in settings.py or here:
-        # paginator.page_size = 25 
-
-        # 3. Paginate the queryset to get the current page's results
-        paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
-
-        # 4. Serialize the paginated queryset
-        serializer = PostSerializer(paginated_queryset, many=True)
-
-        # 5. Return the paginator's formatted response
-        return paginator.get_paginated_response(serializer.data)
-    
+        # if paginated_queryset is not None:
+        #     return paginator.get_paginated_response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ListUserPostsView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        summary="List a User's Posts", # <-- UPDATED
-        description="Retrieves a paginated list of posts created by a specific user.", # <-- UPDATED
+        summary="List a User's Posts",
+        description="Retrieves a paginated list of posts created by a specific user.",
         tags=["Posts"],
         parameters=[
-            # ✅ ADDED: New path parameter for the username
             OpenApiParameter(
                 name="username",
                 type=OpenApiTypes.STR,
@@ -1082,19 +1354,14 @@ class ListUserPostsView(APIView):
         responses={
             200: PostSerializer(many=True),
             401: {"description": "Authentication credentials were not provided."},
-            404: {"description": "User not found."} # <-- ADDED: Document the 404 case
+            404: {"description": "User not found."}
         }
-        
     )
-    # ✅ CHANGED: The method now accepts 'username' from the URL
     def get(self, request, username, *args, **kwargs):
-        
-        # ✅ CHANGED: Look up the target user by username, return 404 if not found
         target_user = get_object_or_404(User, username=username)
 
-        # 1. Build the fully optimized queryset for the target user
         queryset = Post.objects.filter(
-            author=target_user # <-- UPDATED to use the user from the URL
+            author=target_user
         ).select_related(
             'author__profile'
         ).prefetch_related(
@@ -1106,24 +1373,67 @@ class ListUserPostsView(APIView):
             likes_count=Count('likes', distinct=True)
         ).order_by('-created_at')
 
+        # paginator = PageNumberPagination()
+        # paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
 
-        # --- Pagination Logic (No Changes Needed Here) ---
+        serializer = PostSerializer(
+            queryset,
+            many=True,
+            context={'request': request}
+        )
 
-        # 2. Create an instance of the paginator
-        paginator = PageNumberPagination()
+        # if paginated_queryset is not None:
+        #     return paginator.get_paginated_response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+# POST_PAGE_SIZE = 25
+
+# class PostHistoryView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     @extend_schema(
+#         summary="List Older Posts (Paginated)",
+#         description="""Retrieves a paginated list of posts.
         
-        # 3. Paginate the queryset
-        paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
+#         Use the `before_timestamp` query parameter to paginate through older posts.
+#         Each request returns a 'page' of posts created before the provided timestamp.""",
+#         tags=["Posts"],
+#         parameters=[
+#             OpenApiParameter(
+#                 name="before_timestamp",
+#                 type=OpenApiTypes.DATETIME,
+#                 location=OpenApiParameter.QUERY,
+#                 required=False,
+#                 description="The ISO 8601 timestamp of the oldest post you have. The API will return posts older than this.",
+#             ),
+#         ],
+#         responses={200: PostSerializer(many=True)}
+#     )
+#     def get(self, request, *args, **kwargs):
+#         cursor_timestamp_str = request.query_params.get('before_timestamp')
 
-        # 4. Serialize the paginated queryset
-        serializer = PostSerializer(paginated_queryset, many=True)
+#         # Start with the base, optimized queryset
+#         queryset = Post.objects.select_related("author") \
+#             .prefetch_related("tags", "mentions", "media_items") \
+#             .annotate(
+#                 comment_count=Count('comments', distinct=True),
+#                 likes_count=Count('likes', distinct=True)
+#             ).order_by("-created_at")
 
-        # 5. Return the paginator's formatted response
-        return paginator.get_paginated_response(serializer.data)
-    
+#         # If a cursor is provided, filter for posts OLDER than it
+#         if cursor_timestamp_str:
+#             cursor_timestamp = parse_datetime(cursor_timestamp_str)
+#             if cursor_timestamp:
+#                 queryset = queryset.filter(created_at__lt=cursor_timestamp)
 
+#         # Fetch the next page of posts from the DATABASE
+#         posts = queryset[:POST_PAGE_SIZE]
 
-POST_PAGE_SIZE = 25
+#         serializer = PostSerializer(posts, many=True)
+#         return Response(serializer.data)
+
 
 class PostHistoryView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1141,7 +1451,8 @@ class PostHistoryView(APIView):
                 type=OpenApiTypes.DATETIME,
                 location=OpenApiParameter.QUERY,
                 required=False,
-                description="The ISO 8601 timestamp of the oldest post you have. The API will return posts older than this.",
+                description="The ISO 8601 timestamp of the oldest post you have. "
+                            "The API will return posts older than this.",
             ),
         ],
         responses={200: PostSerializer(many=True)}
@@ -1149,7 +1460,7 @@ class PostHistoryView(APIView):
     def get(self, request, *args, **kwargs):
         cursor_timestamp_str = request.query_params.get('before_timestamp')
 
-        # Start with the base, optimized queryset
+        # 1. Base queryset
         queryset = Post.objects.select_related("author") \
             .prefetch_related("tags", "mentions", "media_items") \
             .annotate(
@@ -1157,14 +1468,25 @@ class PostHistoryView(APIView):
                 likes_count=Count('likes', distinct=True)
             ).order_by("-created_at")
 
-        # If a cursor is provided, filter for posts OLDER than it
+        # 2. Apply cursor filter if timestamp is provided
         if cursor_timestamp_str:
             cursor_timestamp = parse_datetime(cursor_timestamp_str)
             if cursor_timestamp:
                 queryset = queryset.filter(created_at__lt=cursor_timestamp)
 
-        # Fetch the next page of posts from the DATABASE
-        posts = queryset[:POST_PAGE_SIZE]
+        # 3. Paginate queryset
+        # paginator = PageNumberPagination()
+        # paginator.page_size = POST_PAGE_SIZE
+        # paginated_queryset = paginator.paginate_queryset(queryset, request, view=self)
 
-        serializer = PostSerializer(posts, many=True)
+        # 4. Serialize paginated data
+        serializer = PostSerializer(
+            queryset,
+            many=True,
+            context={'request': request}
+        )
+
+        # 5. Return paginated response safely
+        # if paginated_queryset is not None:
+        #     return paginator.get_paginated_response(serializer.data)
         return Response(serializer.data)
