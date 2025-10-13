@@ -57,19 +57,18 @@ from django.views.decorators.csrf import csrf_exempt
     },
     tags=["Auth - Social"]
 )
-# 🎯 FIX: Apply the decorator to the entire class view
+# This keeps the CSRF fix you correctly implemented
 @method_decorator(csrf_exempt, name='dispatch')
 class GoogleLogin(SocialLoginView):
-    # CRITICAL FIX: OVERRIDE THE INHERITED SCHEMA ATTRIBUTE
+    # CRITICAL FIX: OVERRIDE THE INHERITED SCHEMA ATTRIBUTE (Keep this for spectacular)
     schema = AutoSchema() 
     
     adapter_class = GoogleOAuth2Adapter
     # Use the dynamic URL from your settings file
-    callback_url = settings.GOOGLE_CALLBACK_URL # <-- Use the setting
-    client_class = OAuth2Client
-
-# ... rest of your urlpatterns ...
-
+    callback_url = settings.GOOGLE_CALLBACK_URL 
+    
+    # ❌ FIX THE TYPE ERROR: REMOVE THIS LINE
+    # client_class = OAuth2Client 
 
 urlpatterns = [
     path("admin/", admin.site.urls),

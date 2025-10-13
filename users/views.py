@@ -290,3 +290,21 @@ class SocialLinkViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(profile=self.request.user.profile)
+
+
+from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+
+class GoogleClient(OAuth2Client):
+    """
+    Custom OAuth2Client for Google to resolve scope_delimiter conflict.
+    Google's scope delimiter is a space (' ').
+    """
+    def __init__(self, *args, **kwargs):
+        # Explicitly set the scope_delimiter to the correct value for Google
+        kwargs['scope_delimiter'] = ' ' 
+        # Ensure 'scope_delimiter' is not passed twice if the parent or calling code is already passing it
+        
+        # NOTE: A common fix is to just let allauth/djoser handle the client_class entirely 
+        # and not set client_class = OAuth2Client in your view.
+        # But if you must set it, use a custom one like this:
+        super().__init__(*args, **kwargs)
